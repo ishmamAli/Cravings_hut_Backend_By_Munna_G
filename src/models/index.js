@@ -9,3 +9,4 @@ module.exports.Income = require("./income.model");
 module.exports.Category = require("./category.model");
 module.exports.Supplier = require("./supplier.model");
 module.exports.SupplierLog = require("./supplierLog.model");
+module.exports.OrderInventoryLog = require("./orderInventoryLog.model");

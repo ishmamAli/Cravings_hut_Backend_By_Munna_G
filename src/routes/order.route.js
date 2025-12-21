@@ -1,7 +1,10 @@
 const express = require("express");
 const Order = require("../models/order.model.js");
 const MenuItem = require("../models/menuItem.model.js");
+const Inventory = require("../models/inventory.model.js");
+const OrderInventoryLog = require("../models/orderInventoryLog.model.js");
 const { requireSignin } = require("../middlewares/auth.js");
+const { convertToInventoryUnit } = require("../utils/unitConversion.js");
 
 const router = express.Router();
 
@@ -160,38 +163,272 @@ router.post("/", requireSignin, async (req, res) => {
   }
 });
 
+async function decrementInventoryAndLog({ order, userId }) {
+  try {
+    const items = Array.isArray(order?.items) ? order.items : [];
+    if (!order?._id || items.length === 0) {
+      return { ok: true, updated: 0, skipped: 0, logId: null };
+    }
+
+    // Collect menuItem ids we need to consume
+    // - normal item => itself
+    // - deal => consume ingredients of each dealItems.menuItem
+    const menuIds = new Set();
+
+    for (const line of items) {
+      if (!line) continue;
+
+      if (line.isDeal && Array.isArray(line.dealItems)) {
+        for (const di of line.dealItems) {
+          if (di?.menuItem) menuIds.add(String(di.menuItem));
+        }
+      } else if (line.menuItem) {
+        menuIds.add(String(line.menuItem));
+      }
+    }
+
+    const menuIdArr = Array.from(menuIds);
+    if (menuIdArr.length === 0) {
+      return { ok: true, updated: 0, skipped: 0, logId: null };
+    }
+
+    // Load menu items with ingredients
+    const menuDocs = await MenuItem.find({ _id: { $in: menuIdArr } })
+      .select("_id ingredients")
+      .lean();
+
+    const menuMap = new Map(menuDocs.map((m) => [String(m._id), m]));
+
+    // Build raw requirements per inventory item: invId -> [{qty, unit}, ...]
+    const rawReq = new Map();
+
+    const pushReq = (invId, qty, unit) => {
+      const id = String(invId);
+      const n = Number(qty);
+      if (!id || !Number.isFinite(n) || n <= 0) return;
+
+      const arr = rawReq.get(id) || [];
+      arr.push({ qty: n, unit });
+      rawReq.set(id, arr);
+    };
+
+    for (const line of items) {
+      const lineQty = Number(line?.qty || 1);
+      if (!Number.isFinite(lineQty) || lineQty <= 0) continue;
+
+      if (line.isDeal && Array.isArray(line.dealItems)) {
+        for (const di of line.dealItems) {
+          const miId = di?.menuItem ? String(di.menuItem) : null;
+          if (!miId) continue;
+
+          const diQty = Number(di?.qty || 1);
+          if (!Number.isFinite(diQty) || diQty <= 0) continue;
+
+          const menu = menuMap.get(miId);
+          const ingredients = Array.isArray(menu?.ingredients) ? menu.ingredients : [];
+
+          for (const ing of ingredients) {
+            if (!ing?.inventoryItem) continue;
+            pushReq(ing.inventoryItem, Number(ing.quantity) * lineQty * diQty, ing.unit);
+          }
+        }
+      } else {
+        const miId = line?.menuItem ? String(line.menuItem) : null;
+        if (!miId) continue;
+
+        const menu = menuMap.get(miId);
+        const ingredients = Array.isArray(menu?.ingredients) ? menu.ingredients : [];
+
+        for (const ing of ingredients) {
+          if (!ing?.inventoryItem) continue;
+          pushReq(ing.inventoryItem, Number(ing.quantity) * lineQty, ing.unit);
+        }
+      }
+    }
+
+    const invIds = Array.from(rawReq.keys());
+    if (invIds.length === 0) {
+      return { ok: true, updated: 0, skipped: 0, logId: null };
+    }
+
+    const invDocs = await Inventory.find({ _id: { $in: invIds } })
+      .select("_id itemName quantity unit")
+      .lean();
+
+    const invMap = new Map(invDocs.map((i) => [String(i._id), i]));
+
+    // Convert requirements to each inventory's unit and SUM
+    // invId -> needQtyInInvUnit
+    const needMap = new Map();
+    const entries = [];
+
+    for (const invId of invIds) {
+      const inv = invMap.get(invId);
+
+      if (!inv) {
+        entries.push({
+          inventoryItem: invId,
+          skipped: true,
+          reason: "NOT_FOUND",
+        });
+        continue;
+      }
+
+      const currentQty = Number(inv.quantity);
+      if (!Number.isFinite(currentQty)) {
+        entries.push({
+          inventoryItem: inv._id,
+          inventoryName: inv.itemName,
+          inventoryUnit: inv.unit,
+          skipped: true,
+          reason: "INVALID_STOCK_QTY",
+        });
+        continue;
+      }
+
+      let totalNeed = 0;
+      const list = rawReq.get(invId) || [];
+
+      let unitMismatch = false;
+      for (const r of list) {
+        try {
+          const converted = convertToInventoryUnit(r.qty, r.unit, inv.unit);
+          const n = Number(converted);
+          if (Number.isFinite(n) && n > 0) totalNeed += n;
+        } catch (e) {
+          unitMismatch = true;
+          break;
+        }
+      }
+
+      if (unitMismatch || totalNeed <= 0) {
+        entries.push({
+          inventoryItem: inv._id,
+          inventoryName: inv.itemName,
+          inventoryUnit: inv.unit,
+          requiredQty: totalNeed || 0,
+          skipped: true,
+          reason: unitMismatch ? "UNIT_MISMATCH" : "INVALID_REQUIRED_QTY",
+        });
+        continue;
+      }
+
+      needMap.set(invId, totalNeed);
+    }
+
+    // Now decrement one-by-one so we can log before/after properly
+    let updatedCount = 0;
+    let skippedCount = 0;
+
+    for (const [invId, needQty] of needMap.entries()) {
+      const inv = invMap.get(invId);
+      if (!inv) continue;
+
+      // Try atomic decrement only if enough exists
+      const updated = await Inventory.findOneAndUpdate(
+        { _id: inv._id, quantity: { $gte: needQty } },
+        { $inc: { quantity: -needQty } },
+        { new: true } // gives afterQty
+      ).lean();
+
+      if (!updated) {
+        skippedCount++;
+        entries.push({
+          inventoryItem: inv._id,
+          inventoryName: inv.itemName,
+          inventoryUnit: inv.unit,
+          requiredQty: needQty,
+          deductedQty: 0,
+          skipped: true,
+          reason: "INSUFFICIENT_STOCK",
+        });
+        continue;
+      }
+
+      updatedCount++;
+      const afterQty = Number(updated.quantity);
+      const beforeQty = afterQty + needQty;
+
+      entries.push({
+        inventoryItem: inv._id,
+        inventoryName: inv.itemName,
+        inventoryUnit: inv.unit,
+        requiredQty: needQty,
+        deductedQty: needQty,
+        beforeQty,
+        afterQty,
+        skipped: false,
+        reason: "DEDUCTED",
+      });
+    }
+
+    // Create log doc (don’t crash if log fails)
+    let logDoc = null;
+    try {
+      logDoc = await OrderInventoryLog.create({
+        order: order._id,
+        orderId: order.orderId,
+        action: "DECREMENT",
+        createdBy: userId,
+        entries,
+        summary: { updated: updatedCount, skipped: skippedCount },
+      });
+    } catch (e) {
+      // if log already exists (unique index), ignore
+      // or any issue, still do not crash
+      console.warn("OrderInventoryLog create skipped:", e?.message);
+    }
+
+    return { ok: true, updated: updatedCount, skipped: skippedCount, logId: logDoc?._id || null };
+  } catch (err) {
+    console.error("decrementInventoryAndLog error:", err);
+    return { ok: false, updated: 0, skipped: 0, error: err.message };
+  }
+}
+
 // Update status (kitchen)
 router.patch("/:id/status", requireSignin, async (req, res) => {
   try {
     const { status } = req.body;
 
-    // Validate status
     const allowedStatus = ["PENDING", "IN_PROGRESS", "DONE"];
     if (!allowedStatus.includes(status)) {
       return res.status(400).json({ message: "Invalid status value" });
     }
 
-    // Prepare updated data
+    const existing = await Order.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Order not found" });
+
+    const isTransitionToDone = existing.status !== "DONE" && status === "DONE" && existing.inventoryDeducted !== true;
+
     const updatedData = { status };
 
     if (status === "DONE") {
-      updatedData.endTime = new Date(); // set current time
+      updatedData.endTime = new Date();
+      if (isTransitionToDone) {
+        updatedData.inventoryDeducted = true;
+        updatedData.inventoryDeductedAt = new Date();
+      }
     } else {
-      updatedData.endTime = null; // reset when not DONE
+      updatedData.endTime = null;
     }
 
-    // Update order
     const order = await Order.findByIdAndUpdate(req.params.id, { $set: updatedData }, { new: true });
 
-    if (!order) {
-      return res.status(404).json({ message: "Order not found" });
+    // ✅ Decrement + store log ONLY once when moved to DONE
+    if (isTransitionToDone) {
+      const userId = req.user?._id; // depends on your auth middleware
+      const result = await decrementInventoryAndLog({ order: existing, userId });
+
+      if (!result.ok) {
+        console.warn("Inventory decrement/log failed but order update succeeded:", result);
+      }
     }
 
     const io = req.app.get("io");
-    if (io) {
-      io.emit("order:update", order);
-    }
-    res.json(order);
+    if (io) io.emit("order:update", order);
+
+    return res.json(order);
   } catch (err) {
     console.error("Error updating order:", err);
     return res.status(500).json({ message: "Server error", error: err.message });

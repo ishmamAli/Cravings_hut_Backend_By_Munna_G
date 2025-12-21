@@ -52,6 +52,8 @@ const orderSchema = mongoose.Schema(
     customerName: { type: String },
     customerPhone: { type: String },
     customerAddress: { type: String },
+    inventoryDeducted: { type: Boolean, default: false },
+    inventoryDeductedAt: { type: Date },
   },
   {
     timestamps: true,

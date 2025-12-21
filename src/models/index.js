@@ -1,0 +1,11 @@
+module.exports.User = require("./user.model");
+module.exports.Permission = require("./permission.model");
+module.exports.MenuItem = require("./menuItem.model");
+module.exports.Order = require("./order.model");
+module.exports.Table = require("./table.model");
+module.exports.Inventory = require("./inventory.model");
+module.exports.Expense = require("./expense.model");
+module.exports.Income = require("./income.model");
+module.exports.Category = require("./category.model");
+module.exports.Supplier = require("./supplier.model");
+module.exports.SupplierLog = require("./supplierLog.model");

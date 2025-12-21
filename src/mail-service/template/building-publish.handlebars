@@ -1,0 +1,52 @@
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="x-ua-compatible" content="ie=edge" />
+    <title>Welcome to Suren!</title>
+</head>
+
+<body>
+    {{{header}}}
+    <div style="margin-left:2rem">
+        <h5>Dear {{firstName}},</h5>
+        <p>
+            A new building has been created and assigned to you. Please review the details and choose to accept or decline the
+            assignment.
+        </p>
+        <p>Building Name: {{buildingName}}</p>
+        <p>Building Address: {{buildingAddress}}</p>
+        {{!-- <div style="margin: 30px 0;">
+            <a href="{{acceptUrl}}" style="text-decoration: none;">
+                <button
+                    style="background-color: #28a745; border: none; padding: 12px 24px; color: white; font-size: 16px; border-radius: 4px; cursor: pointer;">Accept</button>
+            </a>
+            &nbsp;&nbsp;
+            <a href="{{declineUrl}}" style="text-decoration: none;">
+                <button
+                    style="background-color: #dc3545; border: none; padding: 12px 24px; color: white; font-size: 16px; border-radius: 4px; cursor: pointer;">Decline</button>
+            </a>
+        </div> --}}
+
+        <div style="margin: 30px 0;">
+            <a href="{{acceptUrl}}"
+                style="background-color: #28a745; color: white; text-decoration: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; display: inline-block; cursor: pointer;">
+                Accept
+            </a>
+            &nbsp;&nbsp;
+            <a href="{{declineUrl}}"
+                style="background-color: #dc3545; color: white; text-decoration: none; padding: 12px 24px; font-size: 16px; border-radius: 4px; display: inline-block; cursor: pointer;">
+                Decline
+            </a>
+        </div>
+        
+        <p>
+            If you have any questions, feel free to reach out to us.
+        </p>
+        <div>
+            <p>Regards, <br /> Suren Mobile App</p>
+        </div>
+    </div>
+</body>
+
+</html>

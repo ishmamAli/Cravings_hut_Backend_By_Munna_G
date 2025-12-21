@@ -1,0 +1,21 @@
+
+# yarn error logs
+yarn-error.log
+
+# Dependencies
+node_modules
+
+# Environment varibales
+.env*
+!.env*.example
+
+# Code coverage
+coverage
+public/uploads
+
+# syslog
+syslog.txt
+yarn.lock
+
+
+.DS_Store*

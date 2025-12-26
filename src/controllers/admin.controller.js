@@ -33,7 +33,11 @@ const createCategory = catchAsync(async (req, res) => {
 const getAllCategory = catchAsync(async (req, res) => {
   let filter = {};
   let options = pick(req.query, ["limit", "page"]);
-  options.sortBy = "createdAt:desc";
+  if (req.query.type) {
+    options.sortBy = "name:asec";
+  } else {
+    options.sortBy = "createdAt:desc";
+  }
   options.populate = "createdBy,updatedBy";
   const result = await adminService.getAllCategory(filter, options);
   res.status(httpStatus.CREATED).send(result);

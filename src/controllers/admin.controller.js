@@ -285,7 +285,13 @@ const getAllOrder = catchAsync(async (req, res) => {
       $lt: endExclusive.toDate(),
     };
   }
-  const result = await adminService.getAllOrder(filter, options);
+  let result = await adminService.getAllOrder(filter, options);
+  let totalSale = 0;
+  if (result?.results?.length > 0) {
+    // ✅ totalSale from the fetched records
+    totalSale = (result?.results || []).reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+  }
+  result = { ...result, totalSale };
   res.status(httpStatus.OK).send(result);
 });
 

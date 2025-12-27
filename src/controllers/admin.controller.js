@@ -258,46 +258,49 @@ const getAllOrder = catchAsync(async (req, res) => {
   const options = pick(req.query, ["limit", "page"]);
   const filter = {};
 
-  // existing filters
   if (req.query.status) filter.status = req.query.status;
-  if (req.query.type) filter.orderType = req.query.type; // dinein/delivery/takeaway etc
+  if (req.query.type) filter.orderType = req.query.type;
 
-  // ✅ viewer flag from query (cashier/user side will send viewer=user)
-  const viewer = (req.query.viewer || "").toLowerCase(); // "user" | "admin"
+  const viewer = (req.query.viewer || "").toLowerCase();
   const isUserView = viewer === "user";
 
   const tz = "Asia/Karachi";
   const businessStartHour = 8;
-  const qStart = req.query.startDate; // YYYY-MM-DD
-  const qEnd = req.query.endDate; // YYYY-MM-DD
 
-  // ✅ Apply date filter:
-  // - If user view and no dates => today Karachi
-  // - If dates exist => use dates (for admin/user both)
-  if (qStart || qEnd || isUserView) {
-    const startStr = qStart || qEnd || moment().tz(tz).format("YYYY-MM-DD");
-    const endStr = qEnd || startStr;
+  const qStart = req.query.startDate;
+  const qEnd = req.query.endDate;
 
-    const start = moment.tz(startStr, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
-    const endExclusive = moment
-      .tz(endStr, "YYYY-MM-DD", tz)
-      .startOf("day")
-      .add(1, "day")
-      .add(businessStartHour, "hours");
+  // 🟢 determine base date (business aware)
+  const now = moment().tz(tz);
+  let baseDate = qStart || qEnd || now.format("YYYY-MM-DD");
 
-    filter.createdAt = {
-      $gte: start.toDate(),
-      $lt: endExclusive.toDate(),
-    };
+  // 🔥 CRITICAL FIX
+  // If current time is BEFORE business start hour,
+  // treat it as previous business day
+  if (!qStart && !qEnd && isUserView && now.hour() < businessStartHour) {
+    baseDate = now.subtract(1, "day").format("YYYY-MM-DD");
   }
+
+  const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
+
+  const endExclusive = start.clone().add(1, "day");
+
+  filter.createdAt = {
+    $gte: start.toDate(),
+    $lt: endExclusive.toDate(),
+  };
+
   let result = await adminService.getAllOrder(filter, options);
+
   let totalSale = 0;
   if (result?.results?.length > 0) {
-    // ✅ totalSale from the fetched records
-    totalSale = (result?.results || []).reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+    totalSale = result.results.reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
   }
-  result = { ...result, totalSale };
-  res.status(httpStatus.OK).send(result);
+
+  res.status(httpStatus.OK).send({
+    ...result,
+    totalSale,
+  });
 });
 
 const createSupplier = catchAsync(async (req, res) => {

@@ -279,7 +279,11 @@ const getAllOrder = catchAsync(async (req, res) => {
     const endStr = qEnd || startStr;
 
     const start = moment.tz(startStr, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
-    const endExclusive = moment.tz(endStr, "YYYY-MM-DD", tz).startOf("day").add(1, "day");
+    const endExclusive = moment
+      .tz(endStr, "YYYY-MM-DD", tz)
+      .startOf("day")
+      .add(1, "day")
+      .add(businessStartHour, "hours");
 
     filter.createdAt = {
       $gte: start.toDate(),

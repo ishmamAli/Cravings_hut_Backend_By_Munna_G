@@ -77,25 +77,32 @@ orderSchema.pre("save", async function (next) {
   if (!this.isNew) return next();
 
   try {
-    // Asia/Karachi is UTC+5 (no DST)
-    const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+    const BUSINESS_START_HOUR = 8;
 
+    // Convert to Asia/Karachi safely
     const now = new Date();
-    const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
+    const pktNow = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Karachi" }));
 
-    const y = pktNow.getUTCFullYear();
-    const m = String(pktNow.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(pktNow.getUTCDate()).padStart(2, "0");
+    // 🔥 BUSINESS DAY FIX
+    if (pktNow.getHours() < BUSINESS_START_HOUR) {
+      pktNow.setDate(pktNow.getDate() - 1);
+    }
 
-    // Karachi business day key
+    const y = pktNow.getFullYear();
+    const m = String(pktNow.getMonth() + 1).padStart(2, "0");
+    const d = String(pktNow.getDate()).padStart(2, "0");
+
+    // Business day key
     this.orderDay = `${y}-${m}-${d}`;
 
-    // Get last orderId for the same Karachi day
+    // Restart orderId ONLY when business day changes
     const lastOrder = await this.constructor
-      .findOne({ orderDay: this.orderDay }, { orderId: 1 }, { sort: { orderId: -1 } })
+      .findOne({ orderDay: this.orderDay })
+      .sort({ orderId: -1 })
+      .select("orderId")
       .lean();
 
-    this.orderId = lastOrder?.orderId ? lastOrder.orderId + 1 : 1;
+    this.orderId = lastOrder ? lastOrder.orderId + 1 : 1;
 
     next();
   } catch (err) {

@@ -279,17 +279,23 @@ const getAllOrder = catchAsync(async (req, res) => {
   // treat it as previous business day
   if (!qStart && !qEnd && isUserView && now.hour() < businessStartHour) {
     baseDate = now.subtract(1, "day").format("YYYY-MM-DD");
+    const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
+
+    const endExclusive = start.clone().add(1, "day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+  } else if (qStart && qEnd) {
+    const start = moment.tz(qStart, "YYYY-MM-DD", tz).startOf("day");
+    const end = moment.tz(qEnd, "YYYY-MM-DD", tz).endOf("day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lte: end.toDate(),
+    };
   }
-
-  const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
-
-  const endExclusive = start.clone().add(1, "day");
-
-  filter.createdAt = {
-    $gte: start.toDate(),
-    $lt: endExclusive.toDate(),
-  };
-
   let result = await adminService.getAllOrder(filter, options);
 
   let totalSale = 0;

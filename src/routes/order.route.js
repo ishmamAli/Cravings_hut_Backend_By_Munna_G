@@ -415,7 +415,25 @@ router.patch("/:id/status", requireSignin, async (req, res) => {
       updatedData.endTime = null;
     }
 
-    const order = await Order.findByIdAndUpdate(req.params.id, { $set: updatedData }, { new: true });
+    const order = await Order.findByIdAndUpdate(req.params.id, { $set: updatedData }, { new: true }).populate([
+      // populate normal items -> menuItem -> category
+      {
+        path: "items.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+
+      // populate dealItems -> menuItem -> category
+      {
+        path: "items.dealItems.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+    ]);
 
     // ✅ Decrement + store log ONLY once when moved to DONE
     if (isTransitionToDone) {
@@ -543,10 +561,10 @@ router.patch("/:id/modify", requireSignin, async (req, res) => {
 
     await order.save();
 
-    const io = req.app.get("io");
-    if (io) {
-      io.emit("order:update", order);
-    }
+    // const io = req.app.get("io");
+    // if (io) {
+    //   io.emit("order:update", order);
+    // }
 
     res.json(order);
   } catch (err) {
@@ -569,7 +587,25 @@ router.patch("/:id/kitchen-print", requireSignin, async (req, res) => {
         $inc: { kitchenSlipPrintCount: 1 },
       },
       { new: true }
-    );
+    ).populate([
+      // populate normal items -> menuItem -> category
+      {
+        path: "items.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+
+      // populate dealItems -> menuItem -> category
+      {
+        path: "items.dealItems.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+    ]);
 
     if (!updated) return res.status(404).json({ message: "Order not found" });
 

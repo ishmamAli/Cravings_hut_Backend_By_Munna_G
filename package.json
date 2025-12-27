@@ -43,6 +43,7 @@
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^8.5.1",
     "jsrsasign": "^11.1.0",
+    "moment-timezone": "^0.6.0",
     "mongoose": "^6.2.9",
     "morgan": "^1.10.0",
     "multer": "^1.4.4",

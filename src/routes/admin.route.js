@@ -50,8 +50,8 @@ router
   .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteInventoryById);
 router
   .route("/expense")
-  .post(requireSignin, adminMiddleware, validate(adminValidation.createExpense), adminController.createExpense)
-  .get(requireSignin, adminMiddleware, adminController.getAllExpense);
+  .post(requireSignin, validate(adminValidation.createExpense), adminController.createExpense)
+  .get(requireSignin, adminController.getAllExpense);
 router
   .route("/expense/:ObjectId")
   .get(requireSignin, validate(commonValidation.singleObject), adminController.getExpenseById)

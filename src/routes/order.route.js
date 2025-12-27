@@ -48,6 +48,7 @@ router.post("/", requireSignin, async (req, res) => {
       customerName,
       customerPhone,
       customerAddress,
+      deliveryMode,
     } = req.body;
 
     const rawItems = Array.isArray(items) ? items : [];
@@ -149,6 +150,7 @@ router.post("/", requireSignin, async (req, res) => {
       customerName,
       customerPhone,
       customerAddress,
+      deliveryMode,
     });
 
     const io = req.app.get("io");
@@ -550,6 +552,35 @@ router.patch("/:id/modify", requireSignin, async (req, res) => {
   } catch (err) {
     console.error("Error updating order", err);
     res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+router.patch("/:id/kitchen-print", requireSignin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updated = await Order.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          kitchenSlipPrinted: true,
+          kitchenSlipPrintedAt: new Date(),
+        },
+        $inc: { kitchenSlipPrintCount: 1 },
+      },
+      { new: true }
+    );
+
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+
+    // ✅ If you have socket.io attached to app:
+    const io = req.app.get("io");
+    if (io) io.emit("order:update", updated);
+
+    return res.json(updated);
+  } catch (err) {
+    console.error("Error updating order kitchen print", err);
+    res.status(500).json({ message: err?.message || "Internal server error" });
   }
 });
 

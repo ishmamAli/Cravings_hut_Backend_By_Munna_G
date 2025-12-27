@@ -2,6 +2,7 @@ const httpStatus = require("http-status");
 const catchAsync = require("../utils/catchAsync");
 const { adminService } = require("../services");
 const pick = require("../utils/pick");
+const moment = require("moment-timezone");
 
 const register = catchAsync(async (req, res) => {
   let body = req.body;
@@ -254,17 +255,38 @@ const deleteIncomeById = catchAsync(async (req, res) => {
 });
 
 const getAllOrder = catchAsync(async (req, res) => {
-  let filter = {};
-  let options = pick(req.query, ["limit", "page"]);
-  if (req.query.status && req.query.type) {
-    filter = { status: req.query.status, orderType: req.query.type };
-  } else if (req.query.status) {
-    filter = { status: req.query.status };
-  } else if (req.query.type) {
-    filter = { orderType: req.query.type };
+  const options = pick(req.query, ["limit", "page"]);
+  const filter = {};
+
+  // existing filters
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.type) filter.orderType = req.query.type; // dinein/delivery/takeaway etc
+
+  // ✅ viewer flag from query (cashier/user side will send viewer=user)
+  const viewer = (req.query.viewer || "").toLowerCase(); // "user" | "admin"
+  const isUserView = viewer === "user";
+
+  const tz = "Asia/Karachi";
+  const qStart = req.query.startDate; // YYYY-MM-DD
+  const qEnd = req.query.endDate; // YYYY-MM-DD
+
+  // ✅ Apply date filter:
+  // - If user view and no dates => today Karachi
+  // - If dates exist => use dates (for admin/user both)
+  if (qStart || qEnd || isUserView) {
+    const startStr = qStart || qEnd || moment().tz(tz).format("YYYY-MM-DD");
+    const endStr = qEnd || startStr;
+
+    const start = moment.tz(startStr, "YYYY-MM-DD", tz).startOf("day");
+    const endExclusive = moment.tz(endStr, "YYYY-MM-DD", tz).startOf("day").add(1, "day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
   }
   const result = await adminService.getAllOrder(filter, options);
-  res.status(httpStatus.CREATED).send(result);
+  res.status(httpStatus.OK).send(result);
 });
 
 const createSupplier = catchAsync(async (req, res) => {

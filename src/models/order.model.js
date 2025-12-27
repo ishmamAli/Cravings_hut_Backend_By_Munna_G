@@ -41,6 +41,7 @@ const orderSchema = mongoose.Schema(
     // only total, no subtotal
     total: Number,
     orderId: { type: Number },
+    orderDay: { type: String },
     applyCgtTax: { type: Boolean, default: false },
     applyDiscount: { type: Boolean, default: false },
     cgtTax: { type: Number },
@@ -54,36 +55,51 @@ const orderSchema = mongoose.Schema(
     customerAddress: { type: String },
     inventoryDeducted: { type: Boolean, default: false },
     inventoryDeductedAt: { type: Date },
+    deliveryMode: {
+      type: String,
+    },
+    kitchenSlipPrinted: { type: Boolean, default: false },
+    kitchenSlipPrintedAt: { type: Date },
+    kitchenSlipPrintCount: { type: Number, default: 0 },
   },
   {
     timestamps: true,
   }
 );
 
+orderSchema.index({ orderDay: 1, orderId: 1 }, { unique: true });
+
 // add plugin that converts mongoose to json
 orderSchema.plugin(toJSON);
 orderSchema.plugin(paginate);
 
 orderSchema.pre("save", async function (next) {
-  const doc = this;
+  if (!this.isNew) return next();
 
-  if (doc.isNew) {
-    try {
-      const lastOrder = await this.constructor.findOne(
-        { orderId: { $exists: true } },
-        { orderId: 1 },
-        { sort: { orderId: -1 } }
-      );
+  try {
+    // Asia/Karachi is UTC+5 (no DST)
+    const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
 
-      const newId = lastOrder && lastOrder.orderId ? lastOrder.orderId + 1 : 1;
-      doc.orderId = newId;
+    const now = new Date();
+    const pktNow = new Date(now.getTime() + PKT_OFFSET_MS);
 
-      next();
-    } catch (err) {
-      next(err);
-    }
-  } else {
+    const y = pktNow.getUTCFullYear();
+    const m = String(pktNow.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(pktNow.getUTCDate()).padStart(2, "0");
+
+    // Karachi business day key
+    this.orderDay = `${y}-${m}-${d}`;
+
+    // Get last orderId for the same Karachi day
+    const lastOrder = await this.constructor
+      .findOne({ orderDay: this.orderDay }, { orderId: 1 }, { sort: { orderId: -1 } })
+      .lean();
+
+    this.orderId = lastOrder?.orderId ? lastOrder.orderId + 1 : 1;
+
     next();
+  } catch (err) {
+    next(err);
   }
 });
 

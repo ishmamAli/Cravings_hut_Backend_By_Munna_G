@@ -267,6 +267,7 @@ const getAllOrder = catchAsync(async (req, res) => {
   const isUserView = viewer === "user";
 
   const tz = "Asia/Karachi";
+  const businessStartHour = 8;
   const qStart = req.query.startDate; // YYYY-MM-DD
   const qEnd = req.query.endDate; // YYYY-MM-DD
 
@@ -277,7 +278,7 @@ const getAllOrder = catchAsync(async (req, res) => {
     const startStr = qStart || qEnd || moment().tz(tz).format("YYYY-MM-DD");
     const endStr = qEnd || startStr;
 
-    const start = moment.tz(startStr, "YYYY-MM-DD", tz).startOf("day");
+    const start = moment.tz(startStr, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
     const endExclusive = moment.tz(endStr, "YYYY-MM-DD", tz).startOf("day").add(1, "day");
 
     filter.createdAt = {

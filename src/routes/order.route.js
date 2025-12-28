@@ -620,6 +620,62 @@ router.patch("/:id/kitchen-print", requireSignin, async (req, res) => {
   }
 });
 
+router.patch("/:id/payment-received", requireSignin, async (req, res) => {
+  try {
+    const { method, amount } = req.body;
+
+    if (!["cash", "easypaisa"].includes(method)) {
+      return res.status(400).json({ message: "Invalid payment method" });
+    }
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: "Invalid amount" });
+    }
+
+    const order = await Order.findById(req.params.id).populate([
+      // populate normal items -> menuItem -> category
+      {
+        path: "items.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+
+      // populate dealItems -> menuItem -> category
+      {
+        path: "items.dealItems.menuItem",
+        select: "name price category", // optional
+        populate: {
+          path: "category",
+        },
+      },
+    ]);
+
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    if (order.payment?.received) {
+      return res.status(400).json({ message: "Payment already received" });
+    }
+
+    order.payment = {
+      received: true,
+      method,
+      amount,
+      receivedAt: new Date(),
+    };
+
+    await order.save();
+
+    res.json(order);
+  } catch (err) {
+    console.error("Error updating order payment received", err);
+    res.status(500).json({ message: err?.message || "Internal server error" });
+  }
+});
+
 // Get single order (for printing)
 router.get("/:id", requireSignin, async (req, res) => {
   const order = await Order.findById(req.params.id)

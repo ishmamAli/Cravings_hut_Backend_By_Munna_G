@@ -61,6 +61,15 @@ const orderSchema = mongoose.Schema(
     kitchenSlipPrinted: { type: Boolean, default: false },
     kitchenSlipPrintedAt: { type: Date },
     kitchenSlipPrintCount: { type: Number, default: 0 },
+    payment: {
+      received: { type: Boolean, default: false },
+      method: {
+        type: String,
+        enum: ["cash", "easypaisa"],
+      },
+      amount: { type: Number },
+      receivedAt: { type: Date },
+    },
   },
   {
     timestamps: true,

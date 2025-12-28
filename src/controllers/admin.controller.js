@@ -308,13 +308,29 @@ const getAllOrder = catchAsync(async (req, res) => {
   let result = await adminService.getAllOrder(filter, options);
 
   let totalSale = 0;
+  let campusBiteTotalSale = 0;
+  let campusBiteOrderCount = 0;
   if (result?.results?.length > 0) {
-    totalSale = result.results.reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+    // totalSale = result.results.reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+    result.results.forEach((order) => {
+      const amount = Number(order?.total) || 0;
+
+      // ✅ overall sale
+      totalSale += amount;
+
+      // ✅ campus bite only
+      if (order?.orderType === "delivery" && order?.deliveryMode === "campusBite") {
+        campusBiteTotalSale += amount;
+        campusBiteOrderCount += 1;
+      }
+    });
   }
 
   res.status(httpStatus.OK).send({
     ...result,
     totalSale,
+    campusBiteTotalSale,
+    campusBiteOrderCount,
   });
 });
 

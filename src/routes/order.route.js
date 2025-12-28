@@ -50,6 +50,15 @@ router.post("/", requireSignin, async (req, res) => {
       customerAddress,
       deliveryMode,
     } = req.body;
+    if (orderType === "delivery" && deliveryMode === "self") {
+      const phone = String(customerPhone || "").trim();
+      if (!phone) {
+        return res.status(400).json({
+          message: "customerPhone is required for delivery (self).",
+          field: "customerPhone",
+        });
+      }
+    }
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items are required to create an order." });
     }

@@ -463,7 +463,9 @@ router.patch("/:id/modify", requireSignin, async (req, res) => {
     const { id } = req.params;
     let { applyDiscount, discountPer, applyCgtTax, cgtTaxPer, items, customerName, customerPhone, customerAddress } =
       req.body;
-
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items are required to update an order." });
+    }
     const order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });

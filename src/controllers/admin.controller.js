@@ -295,6 +295,15 @@ const getAllOrder = catchAsync(async (req, res) => {
       $gte: start.toDate(),
       $lte: end.toDate(),
     };
+  } else if (isUserView) {
+    const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
+
+    const endExclusive = start.clone().add(1, "day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
   }
   let result = await adminService.getAllOrder(filter, options);
 

@@ -50,7 +50,9 @@ router.post("/", requireSignin, async (req, res) => {
       customerAddress,
       deliveryMode,
     } = req.body;
-
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: "Items are required to create an order." });
+    }
     const rawItems = Array.isArray(items) ? items : [];
 
     // Collect all menuItem ids: main items (deals or single) + selected flavours for deals

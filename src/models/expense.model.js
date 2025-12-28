@@ -5,7 +5,7 @@ const expenseSchema = mongoose.Schema(
   {
     name: { type: String, trim: true },
     amount: { type: Number },
-    date: { type: Date, default: Date.now },
+    date: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },

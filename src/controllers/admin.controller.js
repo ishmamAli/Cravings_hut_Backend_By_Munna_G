@@ -3,6 +3,7 @@ const catchAsync = require("../utils/catchAsync");
 const { adminService } = require("../services");
 const pick = require("../utils/pick");
 const moment = require("moment-timezone");
+const { Expense } = require("../models");
 
 const register = catchAsync(async (req, res) => {
   let body = req.body;
@@ -257,6 +258,7 @@ const deleteIncomeById = catchAsync(async (req, res) => {
 const getAllOrder = catchAsync(async (req, res) => {
   const options = pick(req.query, ["limit", "page"]);
   const filter = {};
+  let expenseFilter = {};
 
   if (req.query.status) filter.status = req.query.status;
   if (req.query.type) filter.orderType = req.query.type;
@@ -287,11 +289,19 @@ const getAllOrder = catchAsync(async (req, res) => {
       $gte: start.toDate(),
       $lt: endExclusive.toDate(),
     };
+    expenseFilter.date = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
   } else if (qStart && qEnd) {
     const start = moment.tz(qStart, "YYYY-MM-DD", tz).startOf("day");
     const end = moment.tz(qEnd, "YYYY-MM-DD", tz).endOf("day");
 
     filter.createdAt = {
+      $gte: start.toDate(),
+      $lte: end.toDate(),
+    };
+    expenseFilter.date = {
       $gte: start.toDate(),
       $lte: end.toDate(),
     };
@@ -301,6 +311,10 @@ const getAllOrder = catchAsync(async (req, res) => {
     const endExclusive = start.clone().add(1, "day");
 
     filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+    expenseFilter.date = {
       $gte: start.toDate(),
       $lt: endExclusive.toDate(),
     };
@@ -325,12 +339,24 @@ const getAllOrder = catchAsync(async (req, res) => {
       }
     });
   }
+  const expenseAgg = await Expense.aggregate([
+    { $match: expenseFilter },
+    {
+      $group: {
+        _id: null,
+        totalExpense: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const totalExpense = expenseAgg.length > 0 ? expenseAgg[0].totalExpense : 0;
 
   res.status(httpStatus.OK).send({
     ...result,
     totalSale,
     campusBiteTotalSale,
     campusBiteOrderCount,
+    totalExpense,
   });
 });
 

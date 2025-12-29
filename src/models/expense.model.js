@@ -11,7 +11,10 @@ const expenseSchema = mongoose.Schema(
     supplier: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Supplier",
-      required: true,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "online"],
     },
   },
   {

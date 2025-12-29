@@ -173,6 +173,11 @@ const createExpense = {
     amount: Joi.number().required(),
     date: Joi.date().required(),
     supplier: Joi.string().optional().custom(objectId),
+    paymentMethod: Joi.string().valid("cash", "online").when("supplier", {
+      is: Joi.exist(),
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
   }),
 };
 

@@ -8,6 +8,11 @@ const expenseSchema = mongoose.Schema(
     date: { type: Date },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    supplier: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Supplier",
+      required: true,
+    },
   },
   {
     timestamps: true,

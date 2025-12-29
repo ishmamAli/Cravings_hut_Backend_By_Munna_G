@@ -191,7 +191,7 @@ const getAllExpense = catchAsync(async (req, res) => {
   let filter = {};
   let options = pick(req.query, ["limit", "page"]);
   options.sortBy = "createdAt:desc";
-  options.populate = "createdBy,updatedBy";
+  options.populate = "createdBy,updatedBy,supplier";
   const result = await adminService.getAllExpense(filter, options);
   res.status(httpStatus.CREATED).send(result);
 });

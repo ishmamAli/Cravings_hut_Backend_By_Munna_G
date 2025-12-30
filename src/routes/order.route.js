@@ -466,6 +466,23 @@ router.patch("/:id/status", requireSignin, async (req, res) => {
   }
 });
 
+const isOrderFromToday = (order) => {
+  const tz = "Asia/Karachi";
+  const businessStartHour = 8;
+
+  // Get today's date at 8:00 AM (start of business day)
+  const todayStart = moment.tz(tz).startOf("day").add(businessStartHour, "hours");
+
+  // Get tomorrow's date at 8:00 AM (end of business day)
+  const tomorrowStart = todayStart.clone().add(1, "day");
+
+  // Get the order's created date
+  const orderDate = moment(order.createdAt).tz(tz);
+
+  // Check if the order date is between 8 AM today and 8 AM tomorrow
+  return orderDate.isBetween(todayStart, tomorrowStart, null, "[]"); // '[]' includes start and end
+};
+
 // PATCH /admin/order/:id
 router.patch("/:id/modify", requireSignin, async (req, res) => {
   try {
@@ -479,7 +496,10 @@ router.patch("/:id/modify", requireSignin, async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
-
+    let isTodayOrderCreated = isOrderFromToday(order);
+    if (!isTodayOrderCreated) {
+      return res.status(400).json({ message: "Invalid permission for edit old order" });
+    }
     const clamp = (v) => {
       const n = Number(v) || 0;
       return Math.min(30, Math.max(0, n));

@@ -479,7 +479,14 @@ const isOrderFromToday = (order) => {
   // Get the order's created date
   const orderDate = moment(order.createdAt).tz(tz);
 
-  // Check if the order date is between 8 AM today and 8 AM tomorrow
+  // If it's before today's 8:00 AM, we need to check if it's from yesterday after 8 AM
+  if (orderDate.isBefore(todayStart)) {
+    // Check if the order was made after 8 AM on the previous day
+    const yesterdayStart = todayStart.clone().subtract(1, "day");
+    return orderDate.isBetween(yesterdayStart, todayStart, null, "[]");
+  }
+
+  // Check if the order is within today (from 8 AM today to 8 AM tomorrow)
   return orderDate.isBetween(todayStart, tomorrowStart, null, "[]"); // '[]' includes start and end
 };
 

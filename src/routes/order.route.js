@@ -495,121 +495,121 @@ const isOrderFromToday = (order) => {
 router.patch("/:id/modify", requireSignin, async (req, res) => {
   try {
     const { id } = req.params;
+
     let { applyDiscount, discountPer, applyCgtTax, cgtTaxPer, items, customerName, customerPhone, customerAddress } =
       req.body;
+
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items are required to update an order." });
     }
-    const order = await Order.findById(id);
+
+    const order = await Order.findById(id).lean();
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
-    let isTodayOrderCreated = isOrderFromToday(order);
-    if (!isTodayOrderCreated) {
+
+    if (!isOrderFromToday(order)) {
       return res.status(400).json({ message: "Invalid permission for edit old order" });
     }
-    const clamp = (v) => {
-      const n = Number(v) || 0;
-      return Math.min(30, Math.max(0, n));
-    };
 
-    if (typeof applyDiscount === "undefined") {
-      applyDiscount = order.applyDiscount;
-    }
-    if (typeof applyCgtTax === "undefined") {
-      applyCgtTax = order.applyCgtTax;
-    }
+    const clamp = (v) => Math.min(30, Math.max(0, Number(v) || 0));
+
+    applyDiscount = typeof applyDiscount !== "undefined" ? applyDiscount : order.applyDiscount;
+    applyCgtTax = typeof applyCgtTax !== "undefined" ? applyCgtTax : order.applyCgtTax;
 
     discountPer = discountPer != null ? clamp(discountPer) : order.discountPer || 0;
     cgtTaxPer = cgtTaxPer != null ? clamp(cgtTaxPer) : order.cgtTaxPer || 0;
 
-    // 🔹 If client sends items, rebuild order.items from MenuItem (including full deal info, like POST /)
-    if (Array.isArray(items)) {
-      const menuItemIds = items.map((i) => i.menuItem).filter(Boolean);
+    // 🔹 Load MenuItems for validation & price
+    const menuItemIds = items.map((i) => i.menuItem).filter(Boolean);
 
-      // IMPORTANT: populate dealItems.item so we can read name/ids same as create order
-      const menuDocs = await MenuItem.find({
-        _id: { $in: menuItemIds },
-        isAvailable: true,
-      }).populate("dealItems.item");
+    const menuDocs = await MenuItem.find({
+      _id: { $in: menuItemIds },
+      isAvailable: true,
+    })
+      .populate("dealItems.item")
+      .lean();
 
-      const menuMap = new Map(menuDocs.map((m) => [m._id.toString(), m]));
+    const menuMap = new Map(menuDocs.map((m) => [m._id.toString(), m]));
 
-      const sanitizedItems = items
-        .filter((i) => i.menuItem && menuMap.has(i.menuItem.toString()))
-        .map((i) => {
-          const m = menuMap.get(i.menuItem.toString());
-          const qty = Number(i.qty) || 1;
+    // 🔹 Map existing order items for reuse
+    const existingItemMap = new Map((order.items || []).map((i) => [i.menuItem.toString(), i]));
 
-          // same logic as POST /
-          const isDeal = m.type === "deal";
+    // 🔥 BUILD FINAL ITEMS (SAFE)
+    const finalItems = items
+      .filter((i) => i.menuItem && menuMap.has(i.menuItem.toString()))
+      .map((i) => {
+        const menu = menuMap.get(i.menuItem.toString());
+        const existingItem = existingItemMap.get(i.menuItem.toString());
 
-          let dealItems = [];
-          if (isDeal && Array.isArray(m.dealItems)) {
-            dealItems = m.dealItems.map((d) => ({
-              menuItem: d.item?._id || d.item,
-              name: d.item?.name || "",
-              qty: d.quantity || d.qty || 1,
+        const qty = Number(i.qty) || 1;
+        const isDeal = menu.type === "deal";
+
+        const baseItem = {
+          menuItem: menu._id,
+          name: menu.name,
+          price: menu.price,
+          qty,
+          notes: i.notes || "",
+          isDeal,
+        };
+
+        // ✅ DEAL ITEMS RESOLUTION (CRITICAL)
+        if (isDeal) {
+          // 1️⃣ frontend sent dealItems
+          if (Array.isArray(i.dealItems) && i.dealItems.length) {
+            baseItem.dealItems = i.dealItems.map((d) => ({
+              menuItem: d.menuItem,
+              name: d.name,
+              qty: Number(d.qty) || 1,
             }));
           }
-
-          const baseItem = {
-            menuItem: m._id,
-            name: m.name,
-            price: m.price, // deal price if deal
-            qty,
-            notes: i.notes || "",
-            isDeal,
-          };
-
-          if (dealItems.length) {
-            baseItem.dealItems = dealItems;
+          // 2️⃣ reuse existing order dealItems
+          else if (existingItem?.dealItems?.length) {
+            baseItem.dealItems = existingItem.dealItems;
           }
+          // 3️⃣ fallback for newly added deal
+          else if (Array.isArray(menu.dealItems)) {
+            baseItem.dealItems = menu.dealItems.map((d) => ({
+              menuItem: d.item?._id,
+              name: d.item?.name || "",
+              qty: d.quantity || 1,
+            }));
+          }
+        }
 
-          return baseItem;
-        });
+        return baseItem;
+      });
 
-      order.items = sanitizedItems;
-    }
+    // 🔹 Apply updates
+    const orderDoc = await Order.findById(id);
+    orderDoc.items = finalItems;
 
-    // Customer info
-    if (typeof customerName !== "undefined") {
-      order.customerName = customerName;
-    }
-    if (typeof customerPhone !== "undefined") {
-      order.customerPhone = customerPhone;
-    }
-    if (typeof customerAddress !== "undefined") {
-      order.customerAddress = customerAddress;
-    }
+    if (typeof customerName !== "undefined") orderDoc.customerName = customerName;
+    if (typeof customerPhone !== "undefined") orderDoc.customerPhone = customerPhone;
+    if (typeof customerAddress !== "undefined") orderDoc.customerAddress = customerAddress;
 
-    const subtotal = (order.items || []).reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
+    // 🔹 Recalculate totals
+    const subtotal = finalItems.reduce((sum, it) => sum + (Number(it.price) || 0) * (Number(it.qty) || 1), 0);
 
     const discountAmount = applyDiscount ? Math.round((discountPer / 100) * subtotal) : 0;
     const cgtTaxAmount = applyCgtTax ? Math.round((cgtTaxPer / 100) * subtotal) : 0;
 
-    const finalTotal = Math.round(subtotal - discountAmount + cgtTaxAmount);
+    orderDoc.applyDiscount = applyDiscount;
+    orderDoc.discountPer = discountPer;
+    orderDoc.discount = discountAmount;
 
-    order.applyDiscount = applyDiscount;
-    order.discountPer = discountPer;
-    order.discount = discountAmount;
+    orderDoc.applyCgtTax = applyCgtTax;
+    orderDoc.cgtTaxPer = cgtTaxPer;
+    orderDoc.cgtTax = cgtTaxAmount;
 
-    order.applyCgtTax = applyCgtTax;
-    order.cgtTaxPer = cgtTaxPer;
-    order.cgtTax = cgtTaxAmount;
+    orderDoc.total = Math.round(subtotal - discountAmount + cgtTaxAmount);
 
-    order.total = finalTotal;
+    await orderDoc.save();
 
-    await order.save();
-
-    // const io = req.app.get("io");
-    // if (io) {
-    //   io.emit("order:update", order);
-    // }
-
-    res.json(order);
+    res.json(orderDoc);
   } catch (err) {
-    console.error("Error updating order", err);
+    console.error("Error updating order:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 });

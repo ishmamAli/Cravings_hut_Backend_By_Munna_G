@@ -185,7 +185,7 @@ const updateExpenseById = {
       date: Joi.date().optional(),
       supplier: Joi.string().optional().custom(objectId),
     })
-    .or("name", "amount", "date", "supplier"),
+    .or("name", "amount", "date", "supplier", "paymentMethod"),
 };
 
 const createIncome = {

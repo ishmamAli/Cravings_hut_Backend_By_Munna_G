@@ -184,6 +184,7 @@ const updateExpenseById = {
       amount: Joi.number().optional(),
       date: Joi.date().optional(),
       supplier: Joi.string().optional().custom(objectId),
+      paymentMethod: Joi.string().optional().valid("cash", "online"),
     })
     .or("name", "amount", "date", "supplier", "paymentMethod"),
 };

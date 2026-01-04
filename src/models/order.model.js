@@ -69,6 +69,8 @@ const orderSchema = mongoose.Schema(
       },
       amount: { type: Number },
       receivedAt: { type: Date },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
     },
   },
   {

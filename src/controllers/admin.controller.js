@@ -339,27 +339,14 @@ const getAllOrder = catchAsync(async (req, res) => {
       }
     });
   }
+
   const expenseAgg = await Expense.aggregate([
     { $match: expenseFilter },
+    { $match: { paymentMethod: "cash" } }, // ✅ only cash expenses
     {
       $group: {
         _id: null,
-        totalExpense: {
-          $sum: {
-            $cond: [
-              // IF supplier EXISTS
-              { $ne: [{ $ifNull: ["$supplier", null] }, null] },
-
-              // THEN → count ONLY cash
-              {
-                $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$amount", 0],
-              },
-
-              // ELSE → supplier does NOT exist → count amount
-              "$amount",
-            ],
-          },
-        },
+        totalExpense: { $sum: "$amount" },
       },
     },
   ]);

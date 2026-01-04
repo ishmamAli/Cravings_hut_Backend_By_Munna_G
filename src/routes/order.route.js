@@ -1,11 +1,16 @@
 const express = require("express");
+const httpStatus = require("http-status");
+const ApiError = require("../utils/ApiError.js");
 const Order = require("../models/order.model.js");
 const MenuItem = require("../models/menuItem.model.js");
 const Inventory = require("../models/inventory.model.js");
 const OrderInventoryLog = require("../models/orderInventoryLog.model.js");
+const { CashOpening, BankDeposit } = require("../models");
 const { requireSignin } = require("../middlewares/auth.js");
 const { convertToInventoryUnit } = require("../utils/unitConversion.js");
 const moment = require("moment-timezone");
+const validate = require("../middlewares/validate.js");
+const { orderValidation } = require("../validations");
 
 const router = express.Router();
 
@@ -63,6 +68,8 @@ router.post("/", requireSignin, async (req, res) => {
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "Items are required to create an order." });
     }
+    let { _id } = req.user;
+    let createdBy = _id;
     const rawItems = Array.isArray(items) ? items : [];
 
     // Collect all menuItem ids: main items (deals or single) + selected flavours for deals
@@ -163,6 +170,7 @@ router.post("/", requireSignin, async (req, res) => {
       customerPhone,
       customerAddress,
       deliveryMode,
+      createdBy,
     });
 
     const io = req.app.get("io");
@@ -495,6 +503,8 @@ const isOrderFromToday = (order) => {
 router.patch("/:id/modify", requireSignin, async (req, res) => {
   try {
     const { id } = req.params;
+    let { _id } = req.user;
+    let updatedBy = _id;
 
     let { applyDiscount, discountPer, applyCgtTax, cgtTaxPer, items, customerName, customerPhone, customerAddress } =
       req.body;
@@ -604,6 +614,7 @@ router.patch("/:id/modify", requireSignin, async (req, res) => {
     orderDoc.cgtTax = cgtTaxAmount;
 
     orderDoc.total = Math.round(subtotal - discountAmount + cgtTaxAmount);
+    orderDoc.updatedBy = updatedBy;
 
     await orderDoc.save();
 
@@ -735,6 +746,79 @@ router.get("/:id", requireSignin, async (req, res) => {
       },
     });
   res.json(order);
+});
+
+router.post("/set/cash-opening", requireSignin, validate(orderValidation.setCashOpening), async (req, res) => {
+  try {
+    const { businessDate, amount } = req.body;
+    if (!businessDate) throw new ApiError(httpStatus.BAD_REQUEST, "businessDate is required");
+
+    // 1) check if exists
+    const existing = await CashOpening.findOne({ businessDate }).select("_id");
+
+    // 2) insert/update with correct user fields
+    const doc = await CashOpening.findOneAndUpdate(
+      { businessDate },
+      existing
+        ? {
+            $set: { amount: Number(amount) || 0, updatedBy: req.user?._id },
+          }
+        : {
+            $set: { amount: Number(amount) || 0 },
+            $setOnInsert: { createdBy: req.user?._id, businessDate },
+          },
+      { upsert: true, new: true }
+    );
+
+    return res.status(200).send(doc);
+  } catch (error) {
+    return res.status(500).json({ message: error?.message || "Server error" });
+  }
+});
+
+router.get("/get/cash-opening", requireSignin, async (req, res) => {
+  try {
+    const { businessDate } = req.query;
+
+    if (!businessDate) {
+      return res.status(400).json({ message: "businessDate is required" });
+    }
+
+    const doc = await CashOpening.findOne({ businessDate }).lean();
+
+    // ✅ if not set, return null (frontend expects null)
+    return res.json(doc || null);
+  } catch (err) {
+    console.error("getOpeningCash error:", err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.post("/create/bank-deposit", requireSignin, validate(orderValidation.createBankDeposit), async (req, res) => {
+  try {
+    const { businessDate, amount, bankName, referenceNo, notes } = req.body;
+    if (!businessDate) throw new ApiError(400, "businessDate is required");
+    if (!amount || Number(amount) <= 0) throw new ApiError(400, "amount must be > 0");
+
+    const dep = await BankDeposit.create({
+      businessDate,
+      amount: Number(amount),
+      bankName: bankName || "",
+      referenceNo: referenceNo || "",
+      notes: notes || "",
+      createdBy: req.user?._id,
+    });
+
+    res.status(201).send(dep);
+  } catch (error) {
+    return res.status(500).json({ message: error?.message || "Server error" });
+  }
+});
+
+router.get("/list/bank-deposit", requireSignin, async (req, res) => {
+  const { businessDate } = req.query;
+  const list = await BankDeposit.find({ businessDate }).sort({ createdAt: -1 });
+  res.status(200).send({ results: list });
 });
 
 module.exports = router;

@@ -344,7 +344,22 @@ const getAllOrder = catchAsync(async (req, res) => {
     {
       $group: {
         _id: null,
-        totalExpense: { $sum: "$amount" },
+        totalExpense: {
+          $sum: {
+            $cond: [
+              // IF supplier EXISTS
+              { $ne: [{ $ifNull: ["$supplier", null] }, null] },
+
+              // THEN → count ONLY cash
+              {
+                $cond: [{ $eq: ["$paymentMethod", "cash"] }, "$amount", 0],
+              },
+
+              // ELSE → supplier does NOT exist → count amount
+              "$amount",
+            ],
+          },
+        },
       },
     },
   ]);

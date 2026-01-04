@@ -185,7 +185,7 @@ router.post("/supplier/logs", requireSignin, async (req, res) => {
 
 router.get("/supplier/logs", requireSignin, async (req, res) => {
   try {
-    const { filterType, supplierId, inventoryItemId, paymentMethod } = req.query;
+    const { filterType, supplierId, inventoryItemId, paymentMethod, page = 1, limit = 10 } = req.query;
 
     const query = {};
 
@@ -200,13 +200,30 @@ router.get("/supplier/logs", requireSignin, async (req, res) => {
     if (filterType === "payment" && paymentMethod) {
       query.paymentMethod = paymentMethod.toLowerCase();
     }
+    const pageNumber = Math.max(parseInt(page), 1);
+    const pageSize = Math.max(parseInt(limit), 1);
+    const skip = (pageNumber - 1) * pageSize;
+    const [logs, total] = await Promise.all([
+      SupplierLog.find(query)
+        .populate("supplier", "name")
+        .populate("items.inventoryItem", "itemName unit")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pageSize),
+      SupplierLog.countDocuments(query),
+    ]);
 
-    const logs = await SupplierLog.find(query)
-      .populate("supplier", "name")
-      .populate("items.inventoryItem", "itemName unit")
-      .sort({ createdAt: -1 });
-
-    res.json(logs);
+    res.json({
+      data: logs,
+      pagination: {
+        total,
+        page: pageNumber,
+        limit: pageSize,
+        totalPages: Math.ceil(total / pageSize),
+        hasNextPage: pageNumber * pageSize < total,
+        hasPrevPage: pageNumber > 1,
+      },
+    });
   } catch (err) {
     console.error("Error fetching supplier logs:", err);
     return res.status(500).json({ message: err?.message || "Failed to fetch supplier logs" });

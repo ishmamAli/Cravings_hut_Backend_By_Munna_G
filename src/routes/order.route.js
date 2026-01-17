@@ -350,7 +350,7 @@ async function decrementInventoryAndLog({ order, userId }) {
       const updated = await Inventory.findOneAndUpdate(
         { _id: inv._id, quantity: { $gte: needQty } },
         { $inc: { quantity: -needQty } },
-        { new: true } // gives afterQty
+        { new: true }, // gives afterQty
       ).lean();
 
       if (!updated) {
@@ -638,7 +638,7 @@ router.patch("/:id/kitchen-print", requireSignin, async (req, res) => {
         },
         $inc: { kitchenSlipPrintCount: 1 },
       },
-      { new: true }
+      { new: true },
     ).populate([
       // populate normal items -> menuItem -> category
       {
@@ -767,7 +767,7 @@ router.post("/set/cash-opening", requireSignin, validate(orderValidation.setCash
             $set: { amount: Number(amount) || 0 },
             $setOnInsert: { createdBy: req.user?._id, businessDate },
           },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
 
     return res.status(200).send(doc);
@@ -819,6 +819,59 @@ router.get("/list/bank-deposit", requireSignin, async (req, res) => {
   const { businessDate } = req.query;
   const list = await BankDeposit.find({ businessDate }).sort({ createdAt: -1 });
   res.status(200).send({ results: list });
+});
+const normalizePhone = (phone = "") => String(phone).replace(/\D/g, "");
+
+router.get("/list/customer-from-order", async (req, res) => {
+  try {
+    const { status = "DONE", orderType } = req.query;
+
+    const filter = {
+      customerPhone: { $exists: true, $ne: null, $ne: "" },
+    };
+    if (status) filter.status = status;
+    if (orderType) filter.orderType = orderType;
+
+    const orders = await Order.find(filter)
+      .select("customerPhone customerName customerAddress createdAt")
+      .sort({ createdAt: -1 }) // latest first
+      .lean();
+
+    const map = new Map(); // key = normalized phone
+
+    for (const o of orders) {
+      const key = normalizePhone(o.customerPhone);
+      if (!key) continue;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          phone: o.customerPhone, // keep latest formatting
+          name: o.customerName || "", // can be empty
+          address: o.customerAddress || "", // can be empty
+          lastOrderAt: o.createdAt,
+          ordersCount: 1,
+        });
+      } else {
+        const existing = map.get(key);
+        existing.ordersCount += 1;
+
+        // Prefer latest NON-empty name/address if existing is empty
+        if (!existing.name && o.customerName) existing.name = o.customerName;
+        if (!existing.address && o.customerAddress) existing.address = o.customerAddress;
+      }
+    }
+
+    const customers = Array.from(map.values()).sort((a, b) => new Date(b.lastOrderAt) - new Date(a.lastOrderAt));
+
+    return res.json({
+      status: "success",
+      results: customers.length,
+      data: customers,
+    });
+  } catch (err) {
+    console.error("Error in getting customer from order:", err);
+    res.status(500).json({ message: err?.message || "Failed to get order" });
+  }
 });
 
 module.exports = router;

@@ -78,7 +78,7 @@ const resetPassword = async (body) => {
     const updateUser = User.findOneAndUpdate(
       { _id: body?.userId },
       { $set: { password: hashPassword } },
-      { new: true }
+      { new: true },
     );
     return updateUser;
   } catch (error) {
@@ -312,7 +312,23 @@ const createExpense = async (body) => {
 
 const getAllExpense = async (filter, options) => {
   try {
-    return await Expense.paginate(filter, options);
+    const paginated = await Expense.paginate(filter, options);
+    const totalAgg = await Expense.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalAmount: { $sum: { $ifNull: ["$amount", 0] } },
+        },
+      },
+    ]);
+
+    const totalExpenseAmount = totalAgg?.[0]?.totalAmount || 0;
+
+    return {
+      ...paginated,
+      totalExpenseAmount,
+    };
   } catch (error) {
     throw new ApiError(httpStatus.BAD_REQUEST, error);
   }

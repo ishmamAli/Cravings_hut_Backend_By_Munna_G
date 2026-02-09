@@ -194,6 +194,8 @@ const createIncome = {
     source: Joi.string().required(),
     amount: Joi.number().required(),
     date: Joi.date().required(),
+    supplier: Joi.string().optional().custom(objectId),
+    paymentMethod: Joi.string().optional().valid("cash", "online"),
   }),
 };
 
@@ -203,8 +205,10 @@ const updateIncomeById = {
       source: Joi.string().optional(),
       amount: Joi.number().optional(),
       date: Joi.date().optional(),
+      supplier: Joi.string().optional().custom(objectId),
+      paymentMethod: Joi.string().optional().valid("cash", "online"),
     })
-    .or("source", "amount", "date"),
+    .or("source", "amount", "date", "supplier", "paymentMethod"),
 };
 
 const createSupplier = {

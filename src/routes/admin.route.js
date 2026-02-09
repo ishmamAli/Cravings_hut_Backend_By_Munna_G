@@ -59,8 +59,8 @@ router
   .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteExpenseById);
 router
   .route("/income")
-  .post(requireSignin, adminMiddleware, validate(adminValidation.createIncome), adminController.createIncome)
-  .get(requireSignin, adminMiddleware, adminController.getAllIncome);
+  .post(requireSignin, validate(adminValidation.createIncome), adminController.createIncome)
+  .get(requireSignin, adminController.getAllIncome);
 router
   .route("/income/:ObjectId")
   .get(requireSignin, validate(commonValidation.singleObject), adminController.getIncomeById)

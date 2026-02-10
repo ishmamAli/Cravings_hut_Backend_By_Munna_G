@@ -183,6 +183,158 @@ router.post("/supplier/logs", requireSignin, async (req, res) => {
   }
 });
 
+router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
+  try {
+    const { logId } = req.params;
+
+    const {
+      supplier,
+      paymentMethod,
+      billId,
+      paymentDate,
+      remarks,
+      items = [], // [{ inventoryItem, quantity, unit, rate, totalAmount }]
+      cashAmount,
+      creditAmount,
+    } = req.body;
+
+    if (!supplier) {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: "supplier is required" });
+    }
+
+    if (!paymentMethod) {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: "paymentMethod is required" });
+    }
+
+    if (!Array.isArray(items) || !items.length) {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: "At least one item is required" });
+    }
+
+    const userId = req.user?._id;
+
+    // 0) Load existing log (and ensure ownership if needed)
+    const existingLog = await SupplierLog.findById(logId);
+    if (!existingLog) {
+      return res.status(httpStatus.NOT_FOUND).json({ message: "Supplier log not found" });
+    }
+
+    // Optional: enforce only creator can edit
+    // if (String(existingLog.createdBy) !== String(userId)) {
+    //   return res.status(httpStatus.FORBIDDEN).json({ message: "Not allowed to edit this log" });
+    // }
+
+    // ✅ IMPORTANT (Inventory rollback):
+    // If you want inventory to stay correct after edits, you must revert old items first,
+    // then apply new items. This assumes your updateInventoryForItem supports negative quantity.
+    // If it doesn't, implement revert logic inside updateInventoryForItem.
+
+    if (Array.isArray(existingLog.items) && existingLog.items.length) {
+      for (const oldItem of existingLog.items) {
+        await updateInventoryForItem({
+          inventoryItem: oldItem.inventoryItem,
+          quantity: -Number(oldItem.quantity || 0),
+          unit: oldItem.unit,
+          rate: Number(oldItem.rate || 0),
+          totalAmount: -Number(oldItem.totalAmount || 0),
+          userId,
+        });
+      }
+    }
+
+    // 1) Apply new inventory updates + calculate grandTotal
+    let grandTotal = 0;
+    const normalizedItems = [];
+
+    for (const item of items) {
+      const { inventoryItem, quantity, unit, rate, totalAmount } = item;
+
+      if (!inventoryItem) throw new Error("inventoryItem is required for all items");
+
+      await updateInventoryForItem({
+        inventoryItem,
+        quantity,
+        unit,
+        rate,
+        totalAmount,
+        userId,
+      });
+
+      const q = Number(quantity);
+      const r = Number(rate);
+      const t = Number(totalAmount);
+
+      grandTotal += t;
+
+      normalizedItems.push({
+        inventoryItem,
+        quantity: q,
+        unit,
+        rate: r,
+        totalAmount: t,
+      });
+    }
+
+    if (!grandTotal || grandTotal <= 0) {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: "Grand total must be > 0" });
+    }
+
+    // 2) split grandTotal into cash + credit based on paymentMethod
+    let cashAmt = 0;
+    let creditAmt = 0;
+
+    const enteredCash = Number(cashAmount || 0);
+    const enteredCredit = Number(creditAmount || 0);
+
+    if (paymentMethod === "cash") {
+      if (!enteredCash || enteredCash <= 0) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Cash amount is required" });
+      }
+      if (enteredCash > grandTotal) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Cash amount cannot exceed grand total" });
+      }
+      cashAmt = enteredCash;
+      creditAmt = grandTotal - enteredCash;
+    } else if (paymentMethod === "credit") {
+      if (!enteredCredit || enteredCredit <= 0) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Credit amount is required" });
+      }
+      if (enteredCredit > grandTotal) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Credit amount cannot exceed grand total" });
+      }
+      creditAmt = enteredCredit;
+      cashAmt = grandTotal - enteredCredit;
+    } else {
+      return res.status(httpStatus.BAD_REQUEST).json({ message: "Invalid paymentMethod" });
+    }
+
+    // 3) Update log
+    existingLog.supplier = supplier;
+    existingLog.paymentMethod = paymentMethod;
+    existingLog.billId = billId;
+    existingLog.paymentDate = paymentDate;
+    existingLog.remarks = remarks;
+    existingLog.grandTotal = grandTotal;
+    existingLog.cashAmount = cashAmt || undefined;
+    existingLog.creditAmount = creditAmt || undefined;
+    existingLog.items = normalizedItems;
+    existingLog.updatedBy = userId; // optional field if you have it
+
+    await existingLog.save();
+
+    await existingLog.populate([
+      { path: "supplier", select: "name" },
+      { path: "items.inventoryItem", select: "itemName unit" },
+    ]);
+
+    return res.status(httpStatus.OK).json(existingLog);
+  } catch (err) {
+    console.error("Error updating supplier log:", err);
+    return res.status(httpStatus.BAD_REQUEST).json({
+      message: err?.message || "Failed to update supplier log",
+    });
+  }
+});
+
 router.get("/supplier/logs", requireSignin, async (req, res) => {
   try {
     const { filterType, supplierId, inventoryItemId, paymentMethod, page = 1, limit = 10 } = req.query;

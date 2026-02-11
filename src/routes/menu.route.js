@@ -230,10 +230,10 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
       for (const oldItem of existingLog.items) {
         await updateInventoryForItem({
           inventoryItem: oldItem.inventoryItem,
-          quantity: -Number(oldItem.quantity || 0),
+          quantity: Number(oldItem.quantity || 0),
           unit: oldItem.unit,
           rate: Number(oldItem.rate || 0),
-          totalAmount: -Number(oldItem.totalAmount || 0),
+          totalAmount: Number(oldItem.totalAmount || 0),
           userId,
         });
       }

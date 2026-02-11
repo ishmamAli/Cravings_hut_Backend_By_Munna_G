@@ -186,7 +186,6 @@ router.post("/supplier/logs", requireSignin, async (req, res) => {
 router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
   try {
     const { logId } = req.params;
-
     const {
       supplier,
       paymentMethod,
@@ -210,24 +209,23 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
       return res.status(httpStatus.BAD_REQUEST).json({ message: "At least one item is required" });
     }
 
+    // Check if all items have a valid quantity > 0
+    for (const item of items) {
+      const { quantity } = item;
+      if (quantity <= 0) {
+        return res.status(httpStatus.BAD_REQUEST).json({ message: "Quantity must be > 0" });
+      }
+    }
+
     const userId = req.user?._id;
 
-    // 0) Load existing log (and ensure ownership if needed)
+    // Load existing log (and ensure ownership if needed)
     const existingLog = await SupplierLog.findById(logId);
     if (!existingLog) {
       return res.status(httpStatus.NOT_FOUND).json({ message: "Supplier log not found" });
     }
 
-    // Optional: enforce only creator can edit
-    // if (String(existingLog.createdBy) !== String(userId)) {
-    //   return res.status(httpStatus.FORBIDDEN).json({ message: "Not allowed to edit this log" });
-    // }
-
-    // ✅ IMPORTANT (Inventory rollback):
-    // If you want inventory to stay correct after edits, you must revert old items first,
-    // then apply new items. This assumes your updateInventoryForItem supports negative quantity.
-    // If it doesn't, implement revert logic inside updateInventoryForItem.
-
+    // Rollback inventory if updating existing log
     if (Array.isArray(existingLog.items) && existingLog.items.length) {
       for (const oldItem of existingLog.items) {
         await updateInventoryForItem({
@@ -241,7 +239,7 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
       }
     }
 
-    // 1) Apply new inventory updates + calculate grandTotal
+    // Apply new inventory updates + calculate grandTotal
     let grandTotal = 0;
     const normalizedItems = [];
 
@@ -278,7 +276,7 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
       return res.status(httpStatus.BAD_REQUEST).json({ message: "Grand total must be > 0" });
     }
 
-    // 2) split grandTotal into cash + credit based on paymentMethod
+    // Split grandTotal into cash + credit based on paymentMethod
     let cashAmt = 0;
     let creditAmt = 0;
 
@@ -307,7 +305,7 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
       return res.status(httpStatus.BAD_REQUEST).json({ message: "Invalid paymentMethod" });
     }
 
-    // 3) Update log
+    // Update log
     existingLog.supplier = supplier;
     existingLog.paymentMethod = paymentMethod;
     existingLog.billId = billId;
@@ -317,7 +315,7 @@ router.patch("/supplier/logs/:logId", requireSignin, async (req, res) => {
     existingLog.cashAmount = cashAmt || undefined;
     existingLog.creditAmount = creditAmt || undefined;
     existingLog.items = normalizedItems;
-    existingLog.updatedBy = userId; // optional field if you have it
+    existingLog.updatedBy = userId;
 
     await existingLog.save();
 

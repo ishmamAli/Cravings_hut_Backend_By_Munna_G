@@ -380,6 +380,55 @@ router.get("/supplier/logs", requireSignin, async (req, res) => {
   }
 });
 
+async function getSupplierLedger(supplierId) {
+  try {
+    const logs = await SupplierLog.find({ supplier: supplierId });
+
+    let totalInventoryReceived = 0;
+    let totalPaymentsMade = 0;
+    let balance = 0;
+
+    // Iterate through all logs for the supplier
+    logs.forEach((log) => {
+      // Calculate total inventory received
+      log.items.forEach((item) => {
+        totalInventoryReceived += item.totalAmount;
+      });
+
+      // Calculate total payments (cash and credit)
+      totalPaymentsMade += log.cashAmount || 0;
+      totalPaymentsMade += log.creditAmount || 0;
+    });
+
+    // Calculate balance (paid amount vs received inventory)
+    balance = totalPaymentsMade - totalInventoryReceived;
+
+    return {
+      totalInventoryReceived,
+      totalPaymentsMade,
+      balance,
+    };
+  } catch (error) {
+    console.error("Error fetching supplier ledger:", error);
+    throw new Error("Failed to fetch ledger data");
+  }
+}
+
+router.get("/supplier/ledger/:supplierId", requireSignin, async (req, res) => {
+  try {
+    const { supplierId } = req.params;
+
+    const ledger = await getSupplierLedger(supplierId);
+
+    return res.status(httpStatus.OK).json(ledger);
+  } catch (err) {
+    console.error("Error fetching supplier ledger:", err);
+    return res.status(httpStatus.BAD_REQUEST).json({
+      message: err?.message || "Failed to fetch supplier ledger",
+    });
+  }
+});
+
 router.get("/modify/deal-ingredients", async (req, res) => {
   try {
     // Get all menu items of type "deal"

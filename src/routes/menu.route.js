@@ -1,6 +1,6 @@
 const express = require("express");
 const { requireSignin } = require("../middlewares/auth");
-const { MenuItem, Inventory, Supplier, SupplierLog } = require("../models");
+const { MenuItem, Inventory, Supplier, SupplierLog, Expense } = require("../models");
 const { convertToInventoryUnit } = require("../utils/unitConversion");
 const httpStatus = require("http-status");
 
@@ -380,45 +380,191 @@ router.get("/supplier/logs", requireSignin, async (req, res) => {
   }
 });
 
-async function getSupplierLedger(supplierId) {
-  try {
-    const logs = await SupplierLog.find({ supplier: supplierId });
+function safeNumber(n) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : 0;
+}
 
-    let totalInventoryReceived = 0;
-    let totalPaymentsMade = 0;
-    let balance = 0;
+function formatInvoice(prefix, id) {
+  const s = String(id || "");
+  return `${prefix}-${s.slice(-6).toUpperCase()}`;
+}
 
-    // Iterate through all logs for the supplier
-    logs.forEach((log) => {
-      // Calculate total inventory received
-      log.items.forEach((item) => {
-        totalInventoryReceived += item.totalAmount;
+function getPurchaseTotalFromLog(log) {
+  // Prefer stored grandTotal
+  if (safeNumber(log.grandTotal) > 0) return safeNumber(log.grandTotal);
+
+  // Otherwise sum items
+  if (Array.isArray(log.items) && log.items.length) {
+    return log.items.reduce((sum, it) => sum + safeNumber(it.totalAmount), 0);
+  }
+
+  // Legacy single-item
+  if (safeNumber(log.totalAmount) > 0) return safeNumber(log.totalAmount);
+
+  return 0;
+}
+
+function getPaidNowFromPurchaseLog(log) {
+  // In your model: cashAmount is immediate paid amount, creditAmount is remaining owed (NOT paid)
+  return safeNumber(log.cashAmount);
+}
+
+function getPurchaseStatus(purchaseTotal, paidNow) {
+  if (purchaseTotal <= 0) return "N/A";
+  if (paidNow <= 0) return "UNPAID";
+  if (paidNow >= purchaseTotal) return "PAID";
+  return "PARTIAL";
+}
+
+async function getSupplierLedgerDetailed(supplierId, { order = "desc" } = {}) {
+  // 1) Supplier
+  const supplier = await Supplier.findById(supplierId).select("name").lean();
+
+  // 2) Raw data
+  const [logs, expenses] = await Promise.all([
+    SupplierLog.find({ supplier: supplierId }).sort({ createdAt: 1 }).lean(),
+    Expense.find({ supplier: supplierId }).sort({ date: 1, createdAt: 1 }).lean(),
+  ]);
+
+  // 3) Convert to unified events
+  const events = [];
+
+  // SupplierLog -> Purchase OR Payment-only
+  for (const log of logs) {
+    const date = log.paymentDate || log.createdAt;
+    const purchaseTotal = getPurchaseTotalFromLog(log);
+    const paidNow = getPaidNowFromPurchaseLog(log);
+
+    // A) Purchase bill (with optional partial payment)
+    if (purchaseTotal > 0) {
+      const status = getPurchaseStatus(purchaseTotal, paidNow);
+
+      events.push({
+        source: "SupplierLog",
+        sourceId: log._id,
+        type: "purchase",
+        date,
+        supplierName: supplier?.name || "Supplier",
+        invoiceNumber: log.billId || log?.credit?.billId || formatInvoice("INV", log._id),
+
+        amountOwed: purchaseTotal,
+        amountPaid: paidNow, // paid at purchase time
+        paymentStatus: status,
+
+        purchaseAmount: purchaseTotal,
+        paymentAmount: paidNow, // show in payment column (optional)
+        remarks: log.remarks || "",
+
+        // delta increases payable balance by (owed - paidNow)
+        delta: purchaseTotal - paidNow,
       });
 
-      // Calculate total payments (cash and credit)
-      totalPaymentsMade += log.cashAmount || 0;
-      totalPaymentsMade += log.creditAmount || 0;
-    });
+      continue;
+    }
 
-    // Calculate balance (paid amount vs received inventory)
-    balance = totalPaymentsMade - totalInventoryReceived;
+    // B) Payment-only log (Cash out etc.)
+    const paymentOnlyAmount = safeNumber(log.cashAmount) + safeNumber(log.creditAmount);
+    // (If you store pure payments in cashAmount, it will work; if you used creditAmount for payments too, it will also count)
+    if (paymentOnlyAmount > 0) {
+      events.push({
+        source: "SupplierLog",
+        sourceId: log._id,
+        type: "payment",
+        date,
+        supplierName: supplier?.name || "Supplier",
+        invoiceNumber: log.billId || formatInvoice("PAY", log._id),
 
-    return {
-      totalInventoryReceived,
-      totalPaymentsMade,
-      balance,
-    };
-  } catch (error) {
-    console.error("Error fetching supplier ledger:", error);
-    throw new Error("Failed to fetch ledger data");
+        amountOwed: 0,
+        amountPaid: paymentOnlyAmount,
+        paymentStatus: log.paymentMethod === "credit" ? "CREDIT_PAYMENT" : "PAYMENT",
+
+        purchaseAmount: 0,
+        paymentAmount: paymentOnlyAmount,
+        remarks: log.remarks || "",
+
+        // delta reduces payable balance
+        delta: -paymentOnlyAmount,
+        paymentMethod: log.paymentMethod,
+      });
+    }
   }
+
+  // Expense -> treat supplier expense as a PAYMENT to supplier
+  for (const exp of expenses) {
+    const date = exp.date || exp.createdAt;
+    const amt = safeNumber(exp.amount);
+
+    if (amt <= 0) continue;
+
+    events.push({
+      source: "Expense",
+      sourceId: exp._id,
+      type: "payment",
+      date,
+      supplierName: supplier?.name || "Supplier",
+      invoiceNumber: formatInvoice("EXP", exp._id),
+
+      amountOwed: 0,
+      amountPaid: amt,
+      paymentStatus: exp.paymentMethod === "online" ? "ONLINE_PAYMENT" : "CASH_PAYMENT",
+
+      purchaseAmount: 0,
+      paymentAmount: amt,
+      remarks: exp.name || "",
+
+      delta: -amt,
+      paymentMethod: exp.paymentMethod,
+    });
+  }
+
+  // 4) Sort ascending for correct running balance
+  events.sort((a, b) => {
+    const da = new Date(a.date).getTime();
+    const db = new Date(b.date).getTime();
+    if (da !== db) return da - db;
+
+    // same time: purchases first then payments (so balance increases then decreases)
+    if (a.type === b.type) return 0;
+    return a.type === "purchase" ? -1 : 1;
+  });
+
+  // 5) Running balance (positive means "You'll Give" / you owe supplier)
+  let runningBalance = 0;
+
+  let totalPurchases = 0;
+  let totalPaid = 0;
+
+  for (const e of events) {
+    totalPurchases += safeNumber(e.purchaseAmount);
+    totalPaid += safeNumber(e.paymentAmount);
+
+    runningBalance += safeNumber(e.delta);
+    e.runningBalance = runningBalance;
+  }
+
+  // 6) return rows (desc for UI like your screenshot)
+  const rows = order === "asc" ? events : [...events].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  return {
+    supplier: {
+      _id: supplierId,
+      name: supplier?.name || "Supplier",
+    },
+    summary: {
+      totalPurchases,
+      totalPaid,
+      balance: runningBalance, // + => you owe supplier
+    },
+    rows,
+  };
 }
 
 router.get("/supplier/ledger/:supplierId", requireSignin, async (req, res) => {
   try {
     const { supplierId } = req.params;
-
-    const ledger = await getSupplierLedger(supplierId);
+    const order = req.query.order || "desc"; // desc default
+    const ledger = await getSupplierLedgerDetailed(supplierId, { order });
 
     return res.status(httpStatus.OK).json(ledger);
   } catch (err) {

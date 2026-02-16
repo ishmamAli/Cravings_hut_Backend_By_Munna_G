@@ -19,12 +19,18 @@ const expenseSchema = mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // add plugin that converts mongoose to json
 expenseSchema.plugin(toJSON);
 expenseSchema.plugin(paginate);
+
+// expense model
+expenseSchema.index({ createdAt: -1 });
+expenseSchema.index({ supplier: 1, createdAt: -1 });
+expenseSchema.index({ paymentMethod: 1, createdAt: -1 });
+expenseSchema.index({ name: 1 });
 
 /**
  * @typedef Expense

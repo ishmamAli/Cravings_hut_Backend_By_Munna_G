@@ -4,6 +4,7 @@ const { adminService } = require("../services");
 const pick = require("../utils/pick");
 const moment = require("moment-timezone");
 const { Expense } = require("../models");
+const mongoose = require("mongoose");
 
 const register = catchAsync(async (req, res) => {
   let body = req.body;
@@ -189,6 +190,22 @@ const createExpense = catchAsync(async (req, res) => {
 
 const getAllExpense = catchAsync(async (req, res) => {
   let filter = {};
+  const { search, paymentMethod, supplier } = req.query;
+  // Search by name (case-insensitive)
+  if (search && String(search).trim()) {
+    const s = String(search).trim();
+    // Escape regex special chars to avoid regex injection / bad patterns
+    const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    filter.name = { $regex: escaped, $options: "i" };
+  }
+  // Filter by paymentMethod
+  if (paymentMethod && ["cash", "online"].includes(paymentMethod)) {
+    filter.paymentMethod = paymentMethod;
+  }
+  // Filter by supplier (ObjectId)
+  if (supplier && mongoose.Types.ObjectId.isValid(supplier)) {
+    filter.supplier = new mongoose.Types.ObjectId(supplier);
+  }
   let options = pick(req.query, ["limit", "page"]);
   options.sortBy = "createdAt:desc";
   options.populate = "createdBy,updatedBy,supplier";

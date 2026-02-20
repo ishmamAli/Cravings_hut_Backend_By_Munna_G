@@ -235,6 +235,15 @@ const updateSupplierById = {
     .or("name", "address", "contactNumber", "email", "faxNumber", "resourcePerson"),
 };
 
+const addWastage = {
+  body: Joi.object().keys({
+    item: Joi.string().required().custom(objectId),
+    quantity: Joi.number().required(),
+    reason: Joi.string().required(),
+    date: Joi.date().required(),
+  }),
+};
+
 module.exports = {
   register,
   login,
@@ -251,4 +260,5 @@ module.exports = {
   updateIncomeById,
   createSupplier,
   updateSupplierById,
+  addWastage,
 };

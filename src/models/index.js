@@ -12,3 +12,4 @@ module.exports.SupplierLog = require("./supplierLog.model");
 module.exports.OrderInventoryLog = require("./orderInventoryLog.model");
 module.exports.CashOpening = require("./cashOpening.model");
 module.exports.BankDeposit = require("./bankDeposit.model");
+module.exports.Wastage = require("./wastage.model");

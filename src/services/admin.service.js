@@ -11,6 +11,7 @@ const {
   Income,
   Order,
   Supplier,
+  Wastage,
 } = require("../models");
 const generateJwtToken = require("../config/generateToken");
 const { generateOTP } = require("../utils/utils");
@@ -491,6 +492,66 @@ const deleteSupplierById = async (id) => {
   }
 };
 
+const addWastage = async (body, userId) => {
+  try {
+    const { item, quantity, reason, date } = body;
+
+    // 1) Find inventory item
+    const inventory = await Inventory.findById(item);
+    if (!inventory) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Inventory item not found");
+    }
+
+    // 2) Validate quantity
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid wastage quantity");
+    }
+
+    // 3) Ensure enough stock
+    if ((inventory.quantity ?? 0) < qty) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Not enough stock. Available: ${inventory.quantity}, Requested: ${qty}`,
+      );
+    }
+
+    // 4) Create wastage
+    const [wastage] = await Wastage.create([
+      {
+        item,
+        quantity: qty,
+        reason,
+        date,
+        createdBy: userId,
+        updatedBy: userId,
+      },
+    ]);
+
+    // 5) Decrease inventory quantity
+    inventory.quantity = Number(inventory.quantity) - qty;
+
+    // ✅ IMPORTANT:
+    // unitPrice is PER UNIT - it should remain the same.
+    // If you want total value, store totalValue separately and update it.
+    // inventory.totalValue = inventory.quantity * inventory.unitPrice;
+
+    inventory.updatedBy = userId;
+    await inventory.save();
+    return wastage;
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error?.message || "Failed to add wastage");
+  }
+};
+
+const getAllWastage = async (filter, options) => {
+  try {
+    return await Wastage.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -531,4 +592,6 @@ module.exports = {
   getSupplierById,
   updateSupplierById,
   deleteSupplierById,
+  addWastage,
+  getAllWastage,
 };

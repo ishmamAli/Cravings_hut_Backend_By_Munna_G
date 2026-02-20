@@ -76,4 +76,8 @@ router
   .patch(requireSignin, validate(adminValidation.updateSupplierById), adminController.updateSupplierById)
   .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteSupplierById);
 router.route("/order").get(requireSignin, adminController.getAllOrder);
+router
+  .route("/wastage")
+  .post(requireSignin, validate(adminValidation.addWastage), adminController.addWastage)
+  .get(requireSignin, adminController.getAllWastage);
 module.exports = router;

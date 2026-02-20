@@ -417,6 +417,22 @@ const deleteSupplierById = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(result);
 });
 
+const addWastage = catchAsync(async (req, res) => {
+  let body = req.body;
+  let { _id } = req.user;
+  const result = await adminService.addWastage(body,_id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getAllWastage = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "item,createdBy,updatedBy";
+  const result = await adminService.getAllWastage(filter, options);
+  res.status(httpStatus.CREATED).send(result);
+});
+
 module.exports = {
   register,
   login,
@@ -457,4 +473,6 @@ module.exports = {
   getSupplierById,
   updateSupplierById,
   deleteSupplierById,
+  addWastage,
+  getAllWastage,
 };

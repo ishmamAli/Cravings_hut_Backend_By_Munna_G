@@ -80,4 +80,13 @@ router
   .route("/wastage")
   .post(requireSignin, validate(adminValidation.addWastage), adminController.addWastage)
   .get(requireSignin, adminController.getAllWastage);
+router
+  .route("/preparation-cost-for-menu")
+  .post(
+    requireSignin,
+    adminMiddleware,
+    validate(adminValidation.addPreparationCostForMenu),
+    adminController.addPreparationCostForMenu,
+  );
+
 module.exports = router;

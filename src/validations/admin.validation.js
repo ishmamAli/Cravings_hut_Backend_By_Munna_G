@@ -244,6 +244,12 @@ const addWastage = {
   }),
 };
 
+const addPreparationCostForMenu = {
+  body: Joi.object().keys({
+    menuItemId: Joi.string().required().custom(objectId),
+    preparationCost: Joi.number().required(),
+  }),
+};
 module.exports = {
   register,
   login,
@@ -261,4 +267,5 @@ module.exports = {
   createSupplier,
   updateSupplierById,
   addWastage,
+  addPreparationCostForMenu,
 };

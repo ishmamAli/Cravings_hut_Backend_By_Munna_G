@@ -552,6 +552,22 @@ const getAllWastage = async (filter, options) => {
   }
 };
 
+const addPreparationCostForMenu = async (body) => {
+  try {
+    let result = await MenuItem.findByIdAndUpdate(
+      body?.menuItemId,
+      { $set: { preparationCost: body?.preparationCost } },
+      { new: true },
+    );
+    if (!result) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Menu item not found");
+    }
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -594,4 +610,5 @@ module.exports = {
   deleteSupplierById,
   addWastage,
   getAllWastage,
+  addPreparationCostForMenu,
 };

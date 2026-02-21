@@ -35,10 +35,11 @@ const menuItemSchema = mongoose.Schema(
         _id: false,
       },
     ],
+    preparationCost: { type: Number },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 menuItemSchema.index({ name: 1, category: 1 }, { unique: true });

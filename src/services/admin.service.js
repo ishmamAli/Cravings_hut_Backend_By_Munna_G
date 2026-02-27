@@ -12,10 +12,17 @@ const {
   Order,
   Supplier,
   Wastage,
+  KitchenInventory,
+  Buyer,
+  Oil,
+  EmployeeProfile,
+  Attendance,
+  SalaryRecord,
 } = require("../models");
 const generateJwtToken = require("../config/generateToken");
 const { generateOTP } = require("../utils/utils");
 const bcrypt = require("bcryptjs");
+const moment = require("moment");
 
 /**
  * Create
@@ -508,11 +515,12 @@ const addWastage = async (body, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, "Invalid wastage quantity");
     }
 
-    // 3) Ensure enough stock
-    if ((inventory.quantity ?? 0) < qty) {
+    // ✅ 3) Ensure enough Kitchen stock (kitchenQuantity)
+    const kitchenQty = Number(inventory.kitchenQuantity ?? 0);
+    if (kitchenQty < qty) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Not enough stock. Available: ${inventory.quantity}, Requested: ${qty}`,
+        `Not enough kitchen stock. Available: ${kitchenQty}, Requested: ${qty}`,
       );
     }
 
@@ -528,16 +536,12 @@ const addWastage = async (body, userId) => {
       },
     ]);
 
-    // 5) Decrease inventory quantity
-    inventory.quantity = Number(inventory.quantity) - qty;
-
-    // ✅ IMPORTANT:
-    // unitPrice is PER UNIT - it should remain the same.
-    // If you want total value, store totalValue separately and update it.
-    // inventory.totalValue = inventory.quantity * inventory.unitPrice;
+    // ✅ 5) Decrease kitchenQuantity (NOT quantity)
+    inventory.kitchenQuantity = kitchenQty - qty;
 
     inventory.updatedBy = userId;
     await inventory.save();
+
     return wastage;
   } catch (error) {
     throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error?.message || "Failed to add wastage");
@@ -563,6 +567,281 @@ const addPreparationCostForMenu = async (body) => {
       throw new ApiError(httpStatus.NOT_FOUND, "Menu item not found");
     }
     return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const assignKitchenInventory = async (body, userId) => {
+  try {
+    const { item, quantity, reason, date } = body;
+
+    // 2) Validate quantity
+    const qty = Number(quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Invalid quantity");
+    }
+
+    // 3) Atomic update: decrease quantity & increase kitchenQuantity
+    //    Also ensures enough stock using quantity: { $gte: qty }
+    const updatedInventory = await Inventory.findOneAndUpdate(
+      { _id: item, quantity: { $gte: qty } },
+      {
+        $inc: { quantity: -qty, kitchenQuantity: qty },
+        $set: { updatedBy: userId },
+      },
+      { new: true },
+    );
+
+    if (!updatedInventory) {
+      const inv = await Inventory.findById(item).lean();
+      if (!inv) {
+        throw new ApiError(httpStatus.NOT_FOUND, "Inventory item not found");
+      }
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Not enough stock. Available: ${inv.quantity ?? 0}, Requested: ${qty}`,
+      );
+    }
+
+    // 4) Create KitchenInventory record
+    let kitchenEntry;
+    try {
+      kitchenEntry = await KitchenInventory.create({
+        item,
+        quantity: qty,
+        reason,
+        date: date ? new Date(date) : new Date(),
+        createdBy: userId,
+        updatedBy: userId,
+      });
+    } catch (createErr) {
+      // 5) Rollback inventory update if kitchen record fails
+      await Inventory.updateOne(
+        { _id: item },
+        {
+          $inc: { quantity: qty, kitchenQuantity: -qty },
+          $set: { updatedBy: userId },
+        },
+      );
+
+      throw createErr;
+    }
+
+    return {
+      kitchenEntry,
+      inventory: updatedInventory,
+    };
+  } catch (error) {
+    if (error?.statusCode) throw error;
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error?.message || "Failed to assign kitchen inventory");
+  }
+};
+
+const getAllKitchenInventory = async (filter, options) => {
+  try {
+    return await KitchenInventory.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const createBuyer = async (body) => {
+  try {
+    return await Buyer.create(body);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getAllBuyer = async (filter, options) => {
+  try {
+    return await Buyer.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getBuyerById = async (id) => {
+  try {
+    const result = await Buyer.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No buyer found");
+    }
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const updateBuyerById = async (id, updateBody) => {
+  try {
+    const result = await Buyer.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No buyer found");
+    }
+    Object.assign(result, updateBody);
+    await result.save();
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const deleteBuyerById = async (id) => {
+  try {
+    const result = await Buyer.findByIdAndRemove(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No buyer found");
+    }
+    return "Delete successfully";
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error);
+  }
+};
+
+const createOil = async (body) => {
+  try {
+    return await Oil.create(body);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getAllOil = async (filter, options) => {
+  try {
+    return await Oil.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getOilById = async (id) => {
+  try {
+    const result = await Oil.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No oil found");
+    }
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const updateOilById = async (id, updateBody) => {
+  try {
+    const result = await Oil.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No oil found");
+    }
+    Object.assign(result, updateBody);
+    await result.save();
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const deleteOilById = async (id) => {
+  try {
+    const result = await Oil.findByIdAndRemove(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No oil found");
+    }
+    return "Delete successfully";
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error);
+  }
+};
+
+const createEmployeeProfile = async (body) => {
+  try {
+    return await EmployeeProfile.create(body);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getEmployees = async (filter, options) => {
+  try {
+    return await EmployeeProfile.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const markAttendance = async (body) => {
+  try {
+    return await Attendance.create(body);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getAttendance = async (filter, options) => {
+  try {
+    return await Attendance.paginate(filter, options);
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const generateMonthlySalary = async (employeeId, month, year, userId) => {
+  try {
+    const employee = await EmployeeProfile.findById(employeeId);
+
+    const start = moment()
+      .year(year)
+      .month(month - 1)
+      .startOf("month");
+
+    const end = moment(start).endOf("month");
+
+    const attendance = await Attendance.find({
+      employee: employeeId,
+      date: { $gte: start.toDate(), $lte: end.toDate() },
+    });
+
+    let present = 0;
+    let absent = 0;
+    let shortLeave = 0;
+
+    attendance.forEach((a) => {
+      if (a.status === "present") present++;
+      if (a.status === "absent") absent++;
+      if (a.status === "short_leave") shortLeave++;
+    });
+
+    // 🔥 2 short = 1 absent
+    const extraAbsent = Math.floor(shortLeave / employee.shortLeavePenaltyRatio);
+
+    const totalAbsent = absent + extraAbsent;
+
+    const perDaySalary = employee.basicSalary / employee.workingDaysPerMonth;
+
+    const netPayable = employee.basicSalary - totalAbsent * perDaySalary;
+
+    return SalaryRecord.create({
+      employee: employeeId,
+      month,
+      year,
+      basicSalary: employee.basicSalary,
+      perDaySalary,
+      presentDays: present,
+      absentDays: absent,
+      shortLeaves: shortLeave,
+      calculatedAbsentFromShort: extraAbsent,
+      netPayable,
+      createdBy: userId,
+    });
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const getSalaries = async (filter, options) => {
+  try {
+    return await SalaryRecord.paginate(filter, options);
   } catch (error) {
     throw new ApiError(httpStatus.BAD_REQUEST, error);
   }
@@ -611,4 +890,22 @@ module.exports = {
   addWastage,
   getAllWastage,
   addPreparationCostForMenu,
+  assignKitchenInventory,
+  getAllKitchenInventory,
+  createBuyer,
+  getAllBuyer,
+  getBuyerById,
+  updateBuyerById,
+  deleteBuyerById,
+  createOil,
+  getAllOil,
+  getOilById,
+  updateOilById,
+  deleteOilById,
+  createEmployeeProfile,
+  getEmployees,
+  markAttendance,
+  getAttendance,
+  generateMonthlySalary,
+  getSalaries,
 };

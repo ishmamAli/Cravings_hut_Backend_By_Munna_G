@@ -194,7 +194,8 @@ const createIncome = {
     source: Joi.string().required(),
     amount: Joi.number().required(),
     date: Joi.date().required(),
-    supplier: Joi.string().optional().custom(objectId),
+    supplier: Joi.string().optional().custom(objectId).allow("", null),
+    buyer: Joi.string().optional().custom(objectId).allow("", null),
     paymentMethod: Joi.string().optional().valid("cash", "online"),
   }),
 };
@@ -205,7 +206,8 @@ const updateIncomeById = {
       source: Joi.string().optional(),
       amount: Joi.number().optional(),
       date: Joi.date().optional(),
-      supplier: Joi.string().optional().custom(objectId),
+      supplier: Joi.string().optional().custom(objectId).allow("", null),
+      buyer: Joi.string().optional().custom(objectId).allow("", null),
       paymentMethod: Joi.string().optional().valid("cash", "online"),
     })
     .or("source", "amount", "date", "supplier", "paymentMethod"),
@@ -250,6 +252,93 @@ const addPreparationCostForMenu = {
     preparationCost: Joi.number().required(),
   }),
 };
+
+const assignKitchenInventory = {
+  body: Joi.object().keys({
+    item: Joi.string().required().custom(objectId),
+    quantity: Joi.number().required(),
+    reason: Joi.string().required(),
+    date: Joi.date().required(),
+  }),
+};
+
+const createBuyer = {
+  body: Joi.object().keys({
+    name: Joi.string().required(),
+    idCardNumber: Joi.string().optional(),
+    address: Joi.string().optional(),
+    contactNumber: Joi.string().optional(),
+    email: Joi.string().email().optional(),
+    faxNumber: Joi.string().optional(),
+    resourcePerson: Joi.string().optional(),
+  }),
+};
+
+const updateBuyerById = {
+  body: Joi.object()
+    .keys({
+      name: Joi.string().required(),
+      idCardNumber: Joi.string().optional().allow("", null),
+      address: Joi.string().optional().allow("", null),
+      contactNumber: Joi.string().allow("", null),
+      email: Joi.string().email().allow("", null),
+      faxNumber: Joi.string().allow("", null),
+      resourcePerson: Joi.string().allow("", null),
+    })
+    .or("name", "idCardNumber", "address", "contactNumber", "email", "faxNumber", "resourcePerson"),
+};
+
+const createOil = {
+  body: Joi.object().keys({
+    source: Joi.string().required().trim(),
+    amount: Joi.number().required().min(0),
+    changeType: Joi.string().required().valid("new", "replaced", "topped_up"),
+    changedAt: Joi.date().required(),
+  }),
+};
+
+const updateOilById = {
+  body: Joi.object()
+    .keys({
+      source: Joi.string().optional().trim(),
+      amount: Joi.number().optional().min(0),
+      changeType: Joi.string().optional().valid("new", "replaced", "topped_up"),
+      changedAt: Joi.date().optional(),
+    })
+    .or("source", "amount", "changeType", "changedAt"),
+};
+
+const createEmployeeProfile = {
+  body: Joi.object().keys({
+    user: Joi.string().required().custom(objectId),
+    designation: Joi.string().optional().allow("", null),
+    department: Joi.string().optional().allow("", null),
+    joiningDate: Joi.date().required(),
+    basicSalary: Joi.number().required().min(0),
+    workingDaysPerMonth: Joi.number().optional(),
+    shortLeavePenaltyRatio: Joi.number().optional(),
+  }),
+};
+
+const markAttendance = {
+  body: Joi.object().keys({
+    employee: Joi.string().required().custom(objectId),
+    date: Joi.date().required(),
+    status: Joi.string().required().valid("present", "absent", "short_leave", "leave"),
+    checkIn: Joi.date().optional().allow(null),
+    checkOut: Joi.date().optional().allow(null),
+    notes: Joi.string().optional().allow("", null),
+  }),
+};
+
+const generateSalary = {
+  body: Joi.object().keys({
+    employeeId: Joi.string().required().custom(objectId),
+    month: Joi.number().required().min(1).max(12),
+    year: Joi.number().required(),
+  }),
+};
+
 module.exports = {
   register,
   login,
@@ -268,4 +357,12 @@ module.exports = {
   updateSupplierById,
   addWastage,
   addPreparationCostForMenu,
+  assignKitchenInventory,
+  createBuyer,
+  updateBuyerById,
+  createOil,
+  updateOilById,
+  createEmployeeProfile,
+  markAttendance,
+  generateSalary,
 };

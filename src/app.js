@@ -11,6 +11,13 @@ const logRequest = require("./middlewares/logRequest");
 const routes = require("./routes");
 const { errorConverter, errorHandler, wrongJwtToken, singleImageRequired } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
+const startMenuCostCron = require("./jobs/menuCost.cron");
+const generateSalary = require("./jobs/generateMonthlySalary");
+const startDailyAttendanceCron = require("./jobs/dailyAttendance.cron");
+
+// startMenuCostCron();
+generateSalary();
+startDailyAttendanceCron();
 
 const app = express();
 

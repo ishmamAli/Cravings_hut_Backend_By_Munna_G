@@ -12,6 +12,10 @@ const incomeSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Supplier",
     },
+    buyer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Buyer",
+    },
     paymentMethod: {
       type: String,
       enum: ["cash", "online"],
@@ -26,6 +30,17 @@ const incomeSchema = mongoose.Schema(
 // add plugin that converts mongoose to json
 incomeSchema.plugin(toJSON);
 incomeSchema.plugin(paginate);
+
+incomeSchema.pre("validate", function (next) {
+  const hasSupplier = !!this.supplier;
+  const hasBuyer = !!this.buyer;
+
+  if ((hasSupplier && hasBuyer) || (!hasSupplier && !hasBuyer)) {
+    return next(new Error("Income must have either supplier or buyer (only one)."));
+  }
+
+  next();
+});
 
 /**
  * @typedef Income

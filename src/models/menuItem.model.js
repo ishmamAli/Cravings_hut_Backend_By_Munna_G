@@ -2,6 +2,19 @@ const mongoose = require("mongoose");
 const { toJSON, paginate } = require("./plugins");
 const mongoDuplicateKeyError = require("./../utils/MongoDuplicateKeyError");
 
+const UNIT_GROUPS = {
+  weight: ["g", "kg"],
+  volume: ["ml", "l"],
+  pcs: ["pcs"],
+};
+
+const getUnitGroup = (unit) => {
+  if (UNIT_GROUPS.weight.includes(unit)) return "weight";
+  if (UNIT_GROUPS.volume.includes(unit)) return "volume";
+  if (UNIT_GROUPS.pcs.includes(unit)) return "pcs";
+  return null;
+};
+
 const menuItemSchema = mongoose.Schema(
   {
     name: { type: String, trim: true },
@@ -36,6 +49,7 @@ const menuItemSchema = mongoose.Schema(
       },
     ],
     preparationCost: { type: Number },
+    systemCost: { type: Number },
   },
   {
     timestamps: true,
@@ -48,7 +62,32 @@ menuItemSchema.index({ name: 1, category: 1 }, { unique: true });
 menuItemSchema.plugin(toJSON);
 menuItemSchema.plugin(paginate);
 
+menuItemSchema.pre("save", async function (next) {
+  try {
+    const Inventory = mongoose.model("Inventory");
+
+    if (!this.ingredients?.length) return next();
+
+    for (const ing of this.ingredients) {
+      const inventory = await Inventory.findById(ing.inventoryItem).lean();
+      if (!inventory) continue;
+
+      const groupA = getUnitGroup(ing.unit);
+      const groupB = getUnitGroup(inventory.unit);
+
+      if (!groupA || !groupB || groupA !== groupB) {
+        return next(new Error(`Unit mismatch: ingredient (${ing.unit}) vs inventory (${inventory.unit})`));
+      }
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 mongoDuplicateKeyError(menuItemSchema);
+
 /**
  * @typedef MenuItem
  */

@@ -3,7 +3,7 @@ const catchAsync = require("../utils/catchAsync");
 const { adminService } = require("../services");
 const pick = require("../utils/pick");
 const moment = require("moment-timezone");
-const { Expense } = require("../models");
+const { Expense, EmployeeProfile } = require("../models");
 const mongoose = require("mongoose");
 
 const register = catchAsync(async (req, res) => {
@@ -246,7 +246,7 @@ const getAllIncome = catchAsync(async (req, res) => {
   let filter = {};
   let options = pick(req.query, ["limit", "page"]);
   options.sortBy = "createdAt:desc";
-  options.populate = "createdBy,updatedBy";
+  options.populate = "createdBy,updatedBy,buyer,supplier";
   const result = await adminService.getAllIncome(filter, options);
   res.status(httpStatus.CREATED).send(result);
 });
@@ -439,6 +439,172 @@ const addPreparationCostForMenu = catchAsync(async (req, res) => {
   res.status(httpStatus.CREATED).send(result);
 });
 
+const assignKitchenInventory = catchAsync(async (req, res) => {
+  let body = req.body;
+  let { _id } = req.user;
+  const result = await adminService.assignKitchenInventory(body, _id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getAllKitchenInventory = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "item,createdBy,updatedBy";
+  const result = await adminService.getAllKitchenInventory(filter, options);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const createBuyer = catchAsync(async (req, res) => {
+  let body = req.body;
+  let { _id } = req.user;
+  body.createdBy = _id;
+  const result = await adminService.createBuyer(body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getAllBuyer = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "createdBy,updatedBy";
+  const result = await adminService.getAllBuyer(filter, options);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getBuyerById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.getBuyerById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const updateBuyerById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  let body = req.body;
+  let { _id } = req.user;
+  body.updatedBy = _id;
+  const result = await adminService.updateBuyerById(id, body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const deleteBuyerById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.deleteBuyerById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const createOil = catchAsync(async (req, res) => {
+  let body = req.body;
+  let { _id } = req.user;
+  body.createdBy = _id;
+  const result = await adminService.createOil(body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getAllOil = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "createdBy,updatedBy";
+  const result = await adminService.getAllOil(filter, options);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getOilById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.getOilById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const updateOilById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  let body = req.body;
+  let { _id } = req.user;
+  body.updatedBy = _id;
+  const result = await adminService.updateOilById(id, body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const deleteOilById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.deleteOilById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const createEmployeeProfile = catchAsync(async (req, res) => {
+  const body = req.body;
+  body.createdBy = req.user._id;
+
+  const result = await adminService.createEmployeeProfile(body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getEmployees = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "createdBy,updatedBy,user";
+  const result = await adminService.getEmployees(filter, options);
+  res.send(result);
+});
+
+const markAttendance = catchAsync(async (req, res) => {
+  const body = req.body;
+  body.createdBy = req.user._id;
+
+  const result = await adminService.markAttendance(body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getAttendance = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "createdBy,updatedBy,employee,employee.user";
+  if (req.query.user) {
+    const employees = await EmployeeProfile.find({
+      user: req.query.user,
+    }).select("_id");
+
+    filter.employee = {
+      $in: employees.map((e) => e._id),
+    };
+  }
+  if (req.query.fromDate || req.query.toDate) {
+    filter.date = {};
+
+    if (req.query.fromDate) {
+      filter.date.$gte = new Date(req.query.fromDate);
+    }
+
+    if (req.query.toDate) {
+      filter.date.$lte = new Date(req.query.toDate);
+    }
+  }
+  const result = await adminService.getAttendance(filter, options);
+  res.send(result);
+});
+
+const generateSalary = catchAsync(async (req, res) => {
+  const result = await adminService.generateMonthlySalary(
+    req.body.employeeId,
+    req.body.month,
+    req.body.year,
+    req.user._id,
+  );
+
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const getSalaries = catchAsync(async (req, res) => {
+  let filter = {};
+  let options = pick(req.query, ["limit", "page"]);
+  options.sortBy = "createdAt:desc";
+  options.populate = "employee,employee.user";
+  const result = await adminService.getSalaries(filter, options);
+  res.send(result);
+});
+
 module.exports = {
   register,
   login,
@@ -482,4 +648,22 @@ module.exports = {
   addWastage,
   getAllWastage,
   addPreparationCostForMenu,
+  assignKitchenInventory,
+  getAllKitchenInventory,
+  createBuyer,
+  getAllBuyer,
+  getBuyerById,
+  updateBuyerById,
+  deleteBuyerById,
+  createOil,
+  getAllOil,
+  getOilById,
+  updateOilById,
+  deleteOilById,
+  createEmployeeProfile,
+  getEmployees,
+  markAttendance,
+  getAttendance,
+  generateSalary,
+  getSalaries,
 };

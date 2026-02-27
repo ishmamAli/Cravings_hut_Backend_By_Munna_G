@@ -6,6 +6,7 @@ const inventorySchema = mongoose.Schema(
   {
     itemName: { type: String, trim: true },
     quantity: { type: Number },
+    kitchenQuantity: { type: Number },
     unit: {
       type: String,
       enum: ["g", "kg", "ml", "l", "pcs"],
@@ -22,7 +23,7 @@ const inventorySchema = mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 inventorySchema.index({ itemName: 1, inventoryType: 1 }, { unique: true });

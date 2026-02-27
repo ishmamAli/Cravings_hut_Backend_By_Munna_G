@@ -1,6 +1,6 @@
 const express = require("express");
 const { requireSignin } = require("../middlewares/auth");
-const { MenuItem, Inventory, Supplier, SupplierLog, Expense } = require("../models");
+const { MenuItem, Inventory, Supplier, SupplierLog, Expense, Buyer, User, EmployeeProfile } = require("../models");
 const { convertToInventoryUnit } = require("../utils/unitConversion");
 const httpStatus = require("http-status");
 
@@ -18,6 +18,21 @@ router.get("/inventory", requireSignin, async (req, res) => {
 
 router.get("/supplier", requireSignin, async (req, res) => {
   const items = await Supplier.find({}).sort({ createdAt: -1 });
+  res.json(items);
+});
+
+router.get("/buyer", requireSignin, async (req, res) => {
+  const items = await Buyer.find({}).sort({ createdAt: -1 });
+  res.json(items);
+});
+
+router.get("/user", requireSignin, async (req, res) => {
+  const items = await User.find({ user_type: "user" }).sort({ createdAt: -1 });
+  res.json(items);
+});
+
+router.get("/employee", requireSignin, async (req, res) => {
+  const items = await EmployeeProfile.find({}).populate("user").sort({ createdAt: -1 });
   res.json(items);
 });
 
@@ -355,7 +370,7 @@ router.get("/supplier/logs", requireSignin, async (req, res) => {
     const skip = (pageNumber - 1) * pageSize;
     const [logs, total] = await Promise.all([
       SupplierLog.find(query)
-        .populate("supplier", "name")
+        .populate("supplier", "name contactNumber")
         .populate("items.inventoryItem", "itemName unit")
         .sort({ createdAt: -1 })
         .skip(skip)

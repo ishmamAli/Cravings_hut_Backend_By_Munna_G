@@ -75,11 +75,33 @@ router
   .get(requireSignin, validate(commonValidation.singleObject), adminController.getSupplierById)
   .patch(requireSignin, validate(adminValidation.updateSupplierById), adminController.updateSupplierById)
   .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteSupplierById);
+router
+  .route("/buyer")
+  .post(requireSignin, adminMiddleware, validate(adminValidation.createBuyer), adminController.createBuyer)
+  .get(requireSignin, adminMiddleware, adminController.getAllBuyer);
+router
+  .route("/buyer/:ObjectId")
+  .get(requireSignin, validate(commonValidation.singleObject), adminController.getBuyerById)
+  .patch(requireSignin, validate(adminValidation.updateBuyerById), adminController.updateBuyerById)
+  .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteBuyerById);
+router
+  .route("/oil")
+  .post(requireSignin, validate(adminValidation.createOil), adminController.createOil)
+  .get(requireSignin, adminController.getAllOil);
+router
+  .route("/oil/:ObjectId")
+  .get(requireSignin, validate(commonValidation.singleObject), adminController.getOilById)
+  .patch(requireSignin, validate(adminValidation.updateOilById), adminController.updateOilById)
+  .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteOilById);
 router.route("/order").get(requireSignin, adminController.getAllOrder);
 router
   .route("/wastage")
   .post(requireSignin, validate(adminValidation.addWastage), adminController.addWastage)
   .get(requireSignin, adminController.getAllWastage);
+router
+  .route("/assign-kitchen-inventory")
+  .post(requireSignin, validate(adminValidation.assignKitchenInventory), adminController.assignKitchenInventory)
+  .get(requireSignin, adminController.getAllKitchenInventory);
 router
   .route("/preparation-cost-for-menu")
   .post(
@@ -88,5 +110,17 @@ router
     validate(adminValidation.addPreparationCostForMenu),
     adminController.addPreparationCostForMenu,
   );
+router
+  .route("/employees")
+  .post(requireSignin, validate(adminValidation.createEmployeeProfile), adminController.createEmployeeProfile)
+  .get(requireSignin, adminController.getEmployees);
+router
+  .route("/attendance")
+  .post(requireSignin, validate(adminValidation.markAttendance), adminController.markAttendance)
+  .get(requireSignin, adminController.getAttendance);
+router
+  .route("/salary/generate")
+  .post(requireSignin, validate(adminValidation.generateSalary), adminController.generateSalary);
 
+router.route("/salary").get(requireSignin, adminController.getSalaries);
 module.exports = router;

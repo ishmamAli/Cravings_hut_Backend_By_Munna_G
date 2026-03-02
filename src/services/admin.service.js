@@ -851,7 +851,7 @@ const getAllOrders = async (filter, options) => {
   try {
     options.populate = "items.menuItem.category,items.dealItems.menuItem.category";
 
-    options.sort = { createdAt: -1 };
+    options.sort = { createdAt: 1 };
 
     const total = await Order.countDocuments(filter);
     const half = Math.ceil(total / 2);

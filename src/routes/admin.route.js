@@ -94,6 +94,7 @@ router
   .patch(requireSignin, validate(adminValidation.updateOilById), adminController.updateOilById)
   .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteOilById);
 router.route("/order").get(requireSignin, adminController.getAllOrder);
+router.route("/orders").get(requireSignin, adminController.getAllOrders);
 router
   .route("/wastage")
   .post(requireSignin, validate(adminValidation.addWastage), adminController.addWastage)

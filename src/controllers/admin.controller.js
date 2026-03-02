@@ -605,6 +605,113 @@ const getSalaries = catchAsync(async (req, res) => {
   res.send(result);
 });
 
+const getAllOrders = catchAsync(async (req, res) => {
+  const options = pick(req.query, ["limit", "page"]);
+  const filter = {};
+  let expenseFilter = {};
+
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.type) filter.orderType = req.query.type;
+
+  const viewer = (req.query.viewer || "").toLowerCase();
+  const isUserView = viewer === "user";
+
+  const tz = "Asia/Karachi";
+  const businessStartHour = 8;
+
+  const qStart = req.query.startDate;
+  const qEnd = req.query.endDate;
+
+  // 🟢 determine base date (business aware)
+  const now = moment().tz(tz);
+  let baseDate = qStart || qEnd || now.format("YYYY-MM-DD");
+
+  // 🔥 CRITICAL FIX
+  // If current time is BEFORE business start hour,
+  // treat it as previous business day
+  if (!qStart && !qEnd && isUserView && now.hour() < businessStartHour) {
+    baseDate = now.subtract(1, "day").format("YYYY-MM-DD");
+    const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
+
+    const endExclusive = start.clone().add(1, "day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+    expenseFilter.date = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+  } else if (qStart && qEnd) {
+    const start = moment.tz(qStart, "YYYY-MM-DD", tz).startOf("day");
+    const end = moment.tz(qEnd, "YYYY-MM-DD", tz).endOf("day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lte: end.toDate(),
+    };
+    expenseFilter.date = {
+      $gte: start.toDate(),
+      $lte: end.toDate(),
+    };
+  } else if (isUserView) {
+    const start = moment.tz(baseDate, "YYYY-MM-DD", tz).startOf("day").add(businessStartHour, "hours");
+
+    const endExclusive = start.clone().add(1, "day");
+
+    filter.createdAt = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+    expenseFilter.date = {
+      $gte: start.toDate(),
+      $lt: endExclusive.toDate(),
+    };
+  }
+  let result = await adminService.getAllOrders(filter, options);
+
+  let totalSale = 0;
+  let campusBiteTotalSale = 0;
+  let campusBiteOrderCount = 0;
+  if (result?.results?.length > 0) {
+    // totalSale = result.results.reduce((sum, o) => sum + (Number(o?.total) || 0), 0);
+    result.results.forEach((order) => {
+      const amount = Number(order?.total) || 0;
+
+      // ✅ overall sale
+      totalSale += amount;
+
+      // ✅ campus bite only
+      if (order?.orderType === "delivery" && order?.deliveryMode === "campusBite") {
+        campusBiteTotalSale += amount;
+        campusBiteOrderCount += 1;
+      }
+    });
+  }
+
+  const expenseAgg = await Expense.aggregate([
+    { $match: expenseFilter },
+    { $match: { paymentMethod: "cash" } }, // ✅ only cash expenses
+    {
+      $group: {
+        _id: null,
+        totalExpense: { $sum: "$amount" },
+      },
+    },
+  ]);
+
+  const totalExpense = expenseAgg.length > 0 ? expenseAgg[0].totalExpense : 0;
+
+  res.status(httpStatus.OK).send({
+    ...result,
+    totalSale,
+    campusBiteTotalSale,
+    campusBiteOrderCount,
+    totalExpense,
+  });
+});
+
 module.exports = {
   register,
   login,
@@ -666,4 +773,5 @@ module.exports = {
   getAttendance,
   generateSalary,
   getSalaries,
+  getAllOrders,
 };

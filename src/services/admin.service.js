@@ -847,6 +847,28 @@ const getSalaries = async (filter, options) => {
   }
 };
 
+const getAllOrders = async (filter, options) => {
+  try {
+    options.populate = "items.menuItem.category,items.dealItems.menuItem.category";
+
+    options.sort = { createdAt: -1 };
+
+    const total = await Order.countDocuments(filter);
+    const half = Math.ceil(total / 2);
+
+    options.limit = half;
+    options.page = 1;
+
+    const result = await Order.paginate(filter, options);
+    result.totalDocs = half;
+    result.totalPages = 1;
+
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -908,4 +930,5 @@ module.exports = {
   getAttendance,
   generateMonthlySalary,
   getSalaries,
+  getAllOrders,
 };

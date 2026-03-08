@@ -26,6 +26,11 @@ router.get("/buyer", requireSignin, async (req, res) => {
   res.json(items);
 });
 
+router.get("/expense", requireSignin, async (req, res) => {
+  const items = await Expense.find({}).sort({ createdAt: -1 });
+  res.json(items);
+});
+
 router.get("/user", requireSignin, async (req, res) => {
   const items = await User.find({ user_type: "user" }).sort({ createdAt: -1 });
   res.json(items);

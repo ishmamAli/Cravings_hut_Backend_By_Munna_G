@@ -278,7 +278,19 @@ const getAllOrder = catchAsync(async (req, res) => {
   let expenseFilter = {};
 
   if (req.query.status) filter.status = req.query.status;
-  if (req.query.type) filter.orderType = req.query.type;
+  if (req.query.type) {
+    const type = String(req.query.type).trim();
+
+    if (type === "deliverySelf") {
+      filter.orderType = "delivery";
+      filter.deliveryMode = "self";
+    } else if (type === "campusBite") {
+      filter.orderType = "delivery";
+      filter.deliveryMode = "campusBite";
+    } else {
+      filter.orderType = type; // dinein, takeaway
+    }
+  }
 
   const viewer = (req.query.viewer || "").toLowerCase();
   const isUserView = viewer === "user";

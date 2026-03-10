@@ -116,9 +116,17 @@ router
   .post(requireSignin, validate(adminValidation.createEmployeeProfile), adminController.createEmployeeProfile)
   .get(requireSignin, adminController.getEmployees);
 router
+  .route("/employees/:ObjectId")
+  .patch(requireSignin, validate(adminValidation.updateEmployeeProfileById), adminController.updateEmployeeProfileById)
+  .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteEmployeeProfileById);
+router
   .route("/attendance")
   .post(requireSignin, validate(adminValidation.markAttendance), adminController.markAttendance)
   .get(requireSignin, adminController.getAttendance);
+router
+  .route("/attendance/:ObjectId")
+  .patch(requireSignin, validate(adminValidation.updateAttendanceById), adminController.updateAttendanceById)
+  .delete(requireSignin, validate(commonValidation.singleObject), adminController.deleteAttendanceById);
 router
   .route("/salary/generate")
   .post(requireSignin, validate(adminValidation.generateSalary), adminController.generateSalary);

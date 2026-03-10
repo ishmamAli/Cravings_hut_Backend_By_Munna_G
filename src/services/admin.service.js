@@ -869,6 +869,58 @@ const getAllOrders = async (filter, options) => {
   }
 };
 
+const updateEmployeeProfileById = async (id, updateBody) => {
+  try {
+    const result = await EmployeeProfile.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No employee profile found");
+    }
+    Object.assign(result, updateBody);
+    await result.save();
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const deleteEmployeeProfileById = async (id) => {
+  try {
+    const result = await EmployeeProfile.findByIdAndRemove(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No employee profile found");
+    }
+    return "Delete successfully";
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error);
+  }
+};
+
+const updateAttendanceById = async (id, updateBody) => {
+  try {
+    const result = await Attendance.findById(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No attendance found");
+    }
+    Object.assign(result, updateBody);
+    await result.save();
+    return result;
+  } catch (error) {
+    throw new ApiError(httpStatus.BAD_REQUEST, error);
+  }
+};
+
+const deleteAttendanceById = async (id) => {
+  try {
+    const result = await Attendance.findByIdAndRemove(id);
+    if (!result) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "No attendance found");
+    }
+    return "Delete successfully";
+  } catch (error) {
+    throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -931,4 +983,8 @@ module.exports = {
   generateMonthlySalary,
   getSalaries,
   getAllOrders,
+  updateEmployeeProfileById,
+  deleteEmployeeProfileById,
+  updateAttendanceById,
+  deleteAttendanceById,
 };

@@ -724,6 +724,36 @@ const getAllOrders = catchAsync(async (req, res) => {
   });
 });
 
+const updateEmployeeProfileById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  let body = req.body;
+  let { _id } = req.user;
+  body.updatedBy = _id;
+  const result = await adminService.updateEmployeeProfileById(id, body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const deleteEmployeeProfileById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.deleteEmployeeProfileById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const updateAttendanceById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  let body = req.body;
+  let { _id } = req.user;
+  body.updatedBy = _id;
+  const result = await adminService.updateAttendanceById(id, body);
+  res.status(httpStatus.CREATED).send(result);
+});
+
+const deleteAttendanceById = catchAsync(async (req, res) => {
+  let id = req.params.ObjectId;
+  const result = await adminService.deleteAttendanceById(id);
+  res.status(httpStatus.CREATED).send(result);
+});
+
 module.exports = {
   register,
   login,
@@ -786,4 +816,8 @@ module.exports = {
   generateSalary,
   getSalaries,
   getAllOrders,
+  updateEmployeeProfileById,
+  deleteEmployeeProfileById,
+  updateAttendanceById,
+  deleteAttendanceById,
 };

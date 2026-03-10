@@ -324,6 +324,28 @@ const createEmployeeProfile = {
   }),
 };
 
+const updateEmployeeProfileById = {
+  body: Joi.object()
+    .keys({
+      user: Joi.string().required().custom(objectId),
+      designation: Joi.string().optional().allow("", null),
+      department: Joi.string().optional().allow("", null),
+      joiningDate: Joi.date().required(),
+      basicSalary: Joi.number().required().min(0),
+      workingDaysPerMonth: Joi.number().optional(),
+      shortLeavePenaltyRatio: Joi.number().optional(),
+    })
+    .or(
+      "user",
+      "designation",
+      "department",
+      "joiningDate",
+      "basicSalary",
+      "workingDaysPerMonth",
+      "shortLeavePenaltyRatio",
+    ),
+};
+
 const markAttendance = {
   body: Joi.object().keys({
     employee: Joi.string().required().custom(objectId),
@@ -333,6 +355,19 @@ const markAttendance = {
     checkOut: Joi.date().optional().allow(null),
     notes: Joi.string().optional().allow("", null),
   }),
+};
+
+const updateAttendanceById = {
+  body: Joi.object()
+    .keys({
+      employee: Joi.string().required().custom(objectId),
+      date: Joi.date().required(),
+      status: Joi.string().required().valid("present", "absent", "short_leave", "leave"),
+      checkIn: Joi.date().optional().allow(null),
+      checkOut: Joi.date().optional().allow(null),
+      notes: Joi.string().optional().allow("", null),
+    })
+    .or("employee", "date", "status", "checkIn", "checkOut", "notes"),
 };
 
 const generateSalary = {
@@ -369,4 +404,6 @@ module.exports = {
   createEmployeeProfile,
   markAttendance,
   generateSalary,
+  updateEmployeeProfileById,
+  updateAttendanceById,
 };

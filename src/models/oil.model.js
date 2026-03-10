@@ -15,6 +15,10 @@ const oilSchema = mongoose.Schema(
       type: Number,
       min: 0,
     },
+    oldQuantity: {
+      type: Number,
+      min: 0,
+    },
     changeType: {
       type: String,
       enum: ["new", "replaced", "topped_up"],

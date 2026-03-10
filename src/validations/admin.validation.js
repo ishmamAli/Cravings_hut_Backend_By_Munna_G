@@ -292,6 +292,7 @@ const createOil = {
   body: Joi.object().keys({
     source: Joi.string().required().trim(),
     amount: Joi.number().required().min(0),
+    oldQuantity: Joi.number().optional().min(0),
     quantity: Joi.number().required().min(0),
     changeType: Joi.string().required().valid("new", "replaced", "topped_up"),
     changedAt: Joi.date().required(),
@@ -304,10 +305,11 @@ const updateOilById = {
       source: Joi.string().optional().trim(),
       amount: Joi.number().optional().min(0),
       quantity: Joi.number().optional().min(0),
+      oldQuantity: Joi.number().optional().min(0),
       changeType: Joi.string().optional().valid("new", "replaced", "topped_up"),
       changedAt: Joi.date().optional(),
     })
-    .or("source", "amount", "quantity", "changeType", "changedAt"),
+    .or("source", "amount", "quantity", "oldQuantity", "changeType", "changedAt"),
 };
 
 const createEmployeeProfile = {

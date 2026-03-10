@@ -6,21 +6,21 @@ const oilSchema = mongoose.Schema(
     source: {
       type: String,
       trim: true,
-      required: true,
     },
     amount: {
       type: Number,
-      required: true,
+      min: 0,
+    },
+    quantity: {
+      type: Number,
       min: 0,
     },
     changeType: {
       type: String,
       enum: ["new", "replaced", "topped_up"],
-      required: true,
     },
     changedAt: {
       type: Date,
-      required: true,
       index: true,
     },
     createdBy: {
